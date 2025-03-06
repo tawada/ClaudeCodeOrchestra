@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClaudeCodeOrchestra</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f5f5f5;
+      color: #333;
+    }
+    .container {
+      max-width: 100%;
+      padding: 20px;
+    }
+    header {
+      background-color: #4a148c;
+      color: white;
+      padding: 15px 20px;
+      text-align: center;
+    }
+    h1 {
+      margin: 0;
+      font-size: 1.8rem;
+    }
+    .content {
+      padding: 20px;
+      background-color: white;
+      border-radius: 5px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      margin-top: 20px;
+    }
+    .card {
+      background-color: #f9f9f9;
+      border-radius: 5px;
+      padding: 15px;
+      margin-bottom: 15px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    .card h3 {
+      margin-top: 0;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 10px;
+      color: #4a148c;
+    }
+    .btn {
+      background-color: #4a148c;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1rem;
+      display: inline-block;
+      text-decoration: none;
+      margin-top: 10px;
+    }
+    .btn:hover {
+      background-color: #7b1fa2;
+    }
+    footer {
+      text-align: center;
+      margin-top: 30px;
+      padding: 15px;
+      color: #777;
+      font-size: 0.9rem;
+    }
+    @media screen and (min-width: 768px) {
+      .container {
+        max-width: 768px;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 2.2rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ClaudeCodeOrchestra</h1>
+    <p>複数のClaudeCodeインスタンスを一括管理するオーケストレーションシステム</p>
+  </header>
+  
+  <div class="container">
+    <div class="content">
+      <h2>ClaudeCodeOrchestraとは</h2>
+      <p>ClaudeCodeOrchestraは、1台のスマートフォンから複数のClaudeCodeインスタンスを管理し、様々なWebアプリケーションを並行開発できるオーケストレーションシステムです。</p>
+      
+      <div class="card">
+        <h3>主な機能</h3>
+        <ul>
+          <li>複数のClaudeCodeセッションの同時並行管理</li>
+          <li>各Webアプリケーション間の完全なコンテキスト分離</li>
+          <li>Gitリポジトリとの連携</li>
+          <li>CI/CDパイプラインとの統合</li>
+          <li>モバイルフレンドリーなUI</li>
+        </ul>
+      </div>
+      
+      <div class="card">
+        <h3>利用開始</h3>
+        <p>デモモードで、ClaudeCodeOrchestraの機能を体験できます。</p>
+        <a href="#" class="btn" onclick="createDemoProject()">デモプロジェクト作成</a>
+        <a href="#" class="btn" onclick="viewDemoProjects()">プロジェクト一覧確認</a>
+      </div>
+      
+      <div id="result" class="card" style="display: none;">
+        <h3>API レスポンス</h3>
+        <pre id="resultContent" style="background: #f0f0f0; padding: 10px; overflow: auto; max-height: 300px;"></pre>
+      </div>
+    </div>
+  </div>
+  
+  <footer>
+    <p>&copy; 2025 ClaudeCodeOrchestra - All Rights Reserved</p>
+  </footer>
+
+  <script>
+    // フロントエンドの実装はReact、Vue、Flutterなどのフレームワークで構築することを推奨
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('ClaudeCodeOrchestra フロントエンド初期化完了');
+    });
+    
+    // デモ用の関数
+    async function createDemoProject() {
+      try {
+        const response = await fetch('/api/mock/projects', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            name: 'デモプロジェクト ' + new Date().toLocaleTimeString(),
+            description: 'これはデモ用のプロジェクトです。'
+          })
+        });
+        
+        const data = await response.json();
+        showResult(data);
+      } catch (error) {
+        showResult({ error: error.message });
+      }
+    }
+    
+    async function viewDemoProjects() {
+      try {
+        const response = await fetch('/api/mock/projects');
+        const data = await response.json();
+        showResult(data);
+      } catch (error) {
+        showResult({ error: error.message });
+      }
+    }
+    
+    function showResult(data) {
+      const resultElement = document.getElementById('result');
+      const resultContentElement = document.getElementById('resultContent');
+      
+      resultElement.style.display = 'block';
+      resultContentElement.textContent = JSON.stringify(data, null, 2);
+    }
+  </script>
+</body>
+</html>
