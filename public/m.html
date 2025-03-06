@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ClaudeCodeOrchestra - モバイル</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/mobile.css">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <div class="header-content">
+        <a href="#" class="logo">ClaudeCodeOrchestra</a>
+        <button class="nav-toggle" id="nav-toggle">
+          <i class="fas fa-bars"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="container">
+      <!-- タブナビゲーション -->
+      <div class="tabs">
+        <div class="tab active" id="tab-projects">プロジェクト</div>
+        <div class="tab" id="tab-sessions">セッション</div>
+        <div class="tab" id="tab-chat">チャット</div>
+      </div>
+      
+      <!-- ステータス表示 -->
+      <div class="alert alert-success" id="status" style="display: none;"></div>
+      <div class="alert alert-error" id="error" style="display: none;"></div>
+      <div class="loading" id="loading" style="display: none;">処理中...</div>
+      
+      <!-- プロジェクト管理タブ -->
+      <div class="tab-content active" id="content-projects">
+        <div class="card">
+          <h3 class="card-title">新規プロジェクト作成</h3>
+          <form id="new-project-form">
+            <div class="form-group">
+              <label for="project-name">プロジェクト名</label>
+              <input type="text" id="project-name" placeholder="プロジェクト名を入力" required>
+            </div>
+            <div class="form-group">
+              <label for="project-description">説明</label>
+              <textarea id="project-description" placeholder="プロジェクトの説明を入力"></textarea>
+            </div>
+            <button type="submit" class="btn btn-block">プロジェクトを作成</button>
+          </form>
+        </div>
+        
+        <!-- プロジェクト一覧 -->
+        <h3 class="section-title">プロジェクト一覧</h3>
+        <div id="projects-list">
+          <!-- プロジェクトがここに表示されます -->
+          <div class="loading">プロジェクトを読み込み中...</div>
+        </div>
+      </div>
+      
+      <!-- セッション管理タブ -->
+      <div class="tab-content" id="content-sessions">
+        <div class="card">
+          <h3 class="card-title">新規セッション開始</h3>
+          <form id="new-session-form">
+            <div class="form-group">
+              <label for="session-api-key">Anthropic APIキー</label>
+              <input type="password" id="session-api-key" placeholder="sk-ant-..." required>
+              <small>※APIキーはデモ用に「demo」と入力してください</small>
+            </div>
+            <button type="submit" class="btn btn-block btn-success">セッションを開始</button>
+          </form>
+        </div>
+        
+        <!-- セッション一覧 -->
+        <h3 class="section-title">セッション一覧</h3>
+        <div id="sessions-list">
+          <!-- セッションがここに表示されます -->
+          <div class="card">
+            <p>プロジェクトが選択されていません。先にプロジェクトを選択してください。</p>
+          </div>
+        </div>
+      </div>
+      
+      <!-- チャットタブ -->
+      <div class="tab-content" id="content-chat">
+        <div id="messages-list">
+          <!-- メッセージがここに表示されます -->
+          <div class="card">
+            <p>セッションが選択されていません。先にセッションを選択してください。</p>
+          </div>
+        </div>
+        
+        <!-- メッセージ入力フォーム -->
+        <form id="chat-form" style="display: none;">
+          <div class="form-group">
+            <textarea id="message-input" placeholder="メッセージを入力してください..." rows="3" required></textarea>
+          </div>
+          <button type="submit" class="btn btn-block">送信</button>
+        </form>
+      </div>
+    </div>
+  </main>
+  
+  <!-- 下部ナビゲーション -->
+  <nav class="bottom-nav">
+    <a href="#" id="nav-projects" class="active">
+      <i class="fas fa-folder"></i>
+      <span>プロジェクト</span>
+    </a>
+    <a href="#" id="nav-sessions">
+      <i class="fas fa-server"></i>
+      <span>セッション</span>
+    </a>
+    <a href="#" id="nav-chat">
+      <i class="fas fa-comment"></i>
+      <span>チャット</span>
+    </a>
+  </nav>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

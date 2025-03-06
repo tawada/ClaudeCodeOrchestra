@@ -27,6 +27,30 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// 静的ファイルの提供 (フロントエンド)
+app.use(express.static('public'));
+
+// m.htmlへのショートカットルート
+app.get('/m', (req, res) => {
+  res.redirect('/m.html');
+});
+
+// モバイルインターフェースへのルート（明示的にファイルを送信）
+app.get('/mobile', (req, res) => {
+  const mobilePath = path.resolve(__dirname, '../public/mobile.html');
+  logger.info(`モバイルURLにアクセスがありました。ファイルパス: ${mobilePath}`);
+  
+  // ファイルの存在を確認
+  const fs = require('fs');
+  if (fs.existsSync(mobilePath)) {
+    logger.info('ファイルが存在します。送信します。');
+    res.sendFile(mobilePath);
+  } else {
+    logger.error(`ファイルが見つかりません: ${mobilePath}`);
+    res.status(404).send('Mobile interface file not found.');
+  }
+});
+
 // ルーティングの設定
 app.use('/api', apiRoutes); // 認証なしでアクセス可能なAPIルート
 
@@ -34,14 +58,6 @@ app.use('/api', apiRoutes); // 認証なしでアクセス可能なAPIルート
 // app.use('/api/auth', authRoutes);
 // app.use('/api/sessions', sessionRoutes);
 logger.info('認証とセッション関連のAPIは無効になっています（MongoDB接続なしのため）');
-
-// モバイルインターフェースへのルート
-app.get('/mobile', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/mobile.html'));
-});
-
-// 静的ファイルの提供 (フロントエンド)
-app.use(express.static('public'));
 
 // 404リダイレクト (すべてのルートが一致しない場合)
 app.use((req, res) => {

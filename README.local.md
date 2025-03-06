@@ -9,4 +9,6 @@ npm start
 その後、ブラウザで以下のURLにアクセスしてください：
 
 - トップページ: http://localhost:3000
-- モバイル版: http://localhost:3000/mobile
+- モバイル版: 
+  - http://localhost:3000/m.html (直接アクセス)
+  - http://localhost:3000/m (リダイレクト経由)
