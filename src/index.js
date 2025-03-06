@@ -35,13 +35,22 @@ app.use('/api', apiRoutes); // 認証なしでアクセス可能なAPIルート
 // app.use('/api/sessions', sessionRoutes);
 logger.info('認証とセッション関連のAPIは無効になっています（MongoDB接続なしのため）');
 
-// モバイルインターフェースへのリダイレクト
+// モバイルインターフェースへのルート
 app.get('/mobile', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/mobile.html'));
 });
 
 // 静的ファイルの提供 (フロントエンド)
 app.use(express.static('public'));
+
+// 404リダイレクト (すべてのルートが一致しない場合)
+app.use((req, res) => {
+  if (req.accepts('html')) {
+    res.redirect('/');
+    return;
+  }
+  res.status(404).json({ error: 'Not found' });
+});
 
 // サーバー起動
 const startServer = async () => {
