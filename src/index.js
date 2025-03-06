@@ -8,6 +8,7 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const path = require('path');
 const logger = require('./utils/logger');
 const authRoutes = require('./auth/routes');
 const apiRoutes = require('./api/routes');
@@ -33,6 +34,11 @@ app.use('/api', apiRoutes); // 認証なしでアクセス可能なAPIルート
 // app.use('/api/auth', authRoutes);
 // app.use('/api/sessions', sessionRoutes);
 logger.info('認証とセッション関連のAPIは無効になっています（MongoDB接続なしのため）');
+
+// モバイルインターフェースへのリダイレクト
+app.get('/mobile', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/mobile.html'));
+});
 
 // 静的ファイルの提供 (フロントエンド)
 app.use(express.static('public'));
