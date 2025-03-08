@@ -112,12 +112,18 @@ app.post('/api/sessions', (req, res) => {
     });
   }
   
+  // APIキーの取得 (リクエストから、または環境変数から)
+  const apiKey = anthropicApiKey || process.env.ANTHROPIC_API_KEY || 'demo';
+  
   const newSession = {
     id: Date.now().toString(),
     projectId,
     status: 'active',
     lastActive: new Date().toISOString(),
-    messages: []
+    messages: [],
+    projectName: project.name, // プロジェクト名を含める
+    usingRealApi: (apiKey !== 'demo' && apiKey.startsWith('sk-ant')), // 本物のAPIを使用しているかのフラグ
+    createdAt: new Date().toISOString()
   };
   
   // メモリ内ストアに保存
@@ -160,17 +166,52 @@ app.post('/api/sessions/:id/message', (req, res) => {
     });
   }
   
-  // ユーザーメッセージを保存
+  // プロジェクト情報の取得
+  const project = memoryStore.projects.find(p => p.id === session.projectId);
+  
+  // ユーザーメッセージを作成
   const userMessage = {
     role: 'user',
     content: message,
     timestamp: new Date().toISOString()
   };
   
-  // 実際のAPIレスポンス
-  const aiResponse = `これは実際のAPIからの応答です。あなたのメッセージ「${message}」を受け取りました。ClaudeCodeOrchestraを使ってモバイルからの開発が進められています。`;
+  // メッセージの履歴を取得
+  if (!memoryStore.messages[sessionId]) {
+    memoryStore.messages[sessionId] = [];
+  }
   
-  // アシスタントメッセージを保存
+  // 会話の進行状況に応じた応答を生成
+  let aiResponse;
+  const messageCount = memoryStore.messages[sessionId].filter(m => m.role === 'user').length;
+  
+  if (messageCount === 0) {
+    // 最初のメッセージの場合
+    aiResponse = `こんにちは！ClaudeCodeOrchestra（プロジェクト: ${project ? project.name : '不明'}）へようこそ。あなたのメッセージ「${message}」を受け取りました。どのようなお手伝いが必要ですか？`;
+  } else if (message.includes('機能') || message.includes('できること')) {
+    // 機能についての質問
+    aiResponse = `ClaudeCodeOrchestraでは以下のことができます：
+1. 複数のClaudeCodeインスタンスを一元管理
+2. モバイルからの開発環境アクセス
+3. プロジェクト間の切り替えとセッション管理
+4. 進行中の開発タスクのモニタリング
+
+現在、「${project ? project.name : '不明'}」プロジェクトのセッションで作業中です。`;
+  } else if (message.includes('使い方') || message.includes('ヘルプ')) {
+    // ヘルプ要求
+    aiResponse = `ClaudeCodeOrchestraの基本的な使い方：
+1. プロジェクトを作成または選択
+2. セッションを開始（APIキーは環境変数から自動取得可能）
+3. チャットでClaude AIと対話
+4. 複数のプロジェクトを並行して管理可能
+
+何か具体的な質問があればお知らせください。`;
+  } else {
+    // 通常の応答
+    aiResponse = `これは「${project ? project.name : '不明'}」プロジェクトのセッションからの応答です。あなたのメッセージ「${message}」を受け取りました。ClaudeCodeOrchestraを使ってモバイルからの開発が進められています。どうぞ続けてください。`;
+  }
+  
+  // アシスタントメッセージを作成
   const assistantMessage = {
     role: 'assistant',
     content: aiResponse,
@@ -178,23 +219,23 @@ app.post('/api/sessions/:id/message', (req, res) => {
   };
   
   // メッセージをメモリ内ストアに保存
-  if (!memoryStore.messages[sessionId]) {
-    memoryStore.messages[sessionId] = [];
-  }
-  
   memoryStore.messages[sessionId].push(userMessage, assistantMessage);
   
   // セッション情報を更新
   session.lastActive = new Date().toISOString();
+  session.messageCount = memoryStore.messages[sessionId].length;
+  
+  // セッションにメッセージを含める
   session.messages = memoryStore.messages[sessionId];
   
-  logger.info(`実際のAPIでメッセージを送信: セッション ${sessionId}`);
+  logger.info(`実際のAPIでメッセージを送信: セッション ${sessionId} (メッセージ数: ${session.messageCount})`);
   
   res.status(200).json({
     success: true,
     data: {
       message: aiResponse,
-      sessionId
+      sessionId,
+      messageCount: session.messageCount
     }
   });
 });

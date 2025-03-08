@@ -454,16 +454,12 @@ function setupEventListeners() {
       return;
     }
     
-    if (apiKey === '') {
-      showError('APIキーを入力してください');
-      return;
-    }
-    
+    // APIキーはオプション（サーバー側で環境変数からも取得可能）
     const session = await api.createSession(state.currentProject.id, apiKey);
     if (session) {
       elements.sessionApiKeyInput.value = '';
       state.currentSession = session;
-      state.messages = [];
+      state.messages = session.messages || [];
       showTab('chat');
     }
   });
