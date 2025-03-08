@@ -51,13 +51,11 @@ app.get('/mobile', (req, res) => {
   }
 });
 
-// ルーティングの設定
+// API共通ルート（認証不要）
 app.use('/api', apiRoutes); // 認証なしでアクセス可能なAPIルート
 
-// 認証関連ルートの無効化（MongoDB接続なしの開発環境用）
-// app.use('/api/auth', authRoutes);
-// app.use('/api/sessions', sessionRoutes);
-logger.info('認証とセッション関連のAPIは無効になっています（MongoDB接続なしのため）');
+// 認証・セッション関連のAPIルートは動的に追加
+// .envのUSE_MONGODBフラグに基づいてstartServer()内で設定
 
 // 404リダイレクト (すべてのルートが一致しない場合)
 app.use((req, res) => {
@@ -71,18 +69,36 @@ app.use((req, res) => {
 // サーバー起動
 const startServer = async () => {
   try {
+    // .envからMongoDBの設定を読み込む
+    const useMongoDb = process.env.USE_MONGODB === 'true';
+    
+    // MongoDBを使用する場合は接続
+    if (useMongoDb) {
+      try {
+        await connectDB();
+        logger.info(`MongoDBに接続しました。URI: ${process.env.MONGODB_URI}`);
+        
+        // 認証・セッション関連のAPIルートを有効化
+        app.use('/api/auth', authRoutes);
+        app.use('/api/sessions', sessionRoutes);
+        logger.info('認証とセッション関連のAPIが有効になりました');
+      } catch (dbError) {
+        logger.error(`MongoDB接続エラー: ${dbError.message}`);
+        logger.info('モックモードにフォールバックします');
+      }
+    } else {
+      logger.info('USE_MONGODB=falseのため、モックモードで起動します');
+    }
+    
     // サーバーリスニング開始
     app.listen(PORT, () => {
       logger.info(`サーバーが起動しました。ポート: ${PORT}`);
       
-      // MongoDBがない環境でも起動できるようにするためのメッセージ
-      logger.info(`注意: MongoDBへの接続はスキップされました。現在はメモリ内データのみで動作します。`);
+      if (!useMongoDb) {
+        logger.info(`注意: MongoDBは使用されていません。現在はメモリ内データのみで動作します。`);
+        logger.info(`機能を完全に使用するには、MongoDBをインストールし、.envファイルでUSE_MONGODB=trueに設定してください`);
+      }
     });
-    
-    // MongoDBの接続をオプション化
-    // MongoDB を使用する場合はこのコメントを解除してください
-    // また、MongoDB のインストールが必要です（MONGODB_INSTALL.md 参照）
-    // await connectDB();
   } catch (error) {
     logger.error(`サーバー起動エラー: ${error.message}`);
     process.exit(1);

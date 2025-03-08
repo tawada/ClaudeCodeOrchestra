@@ -38,10 +38,9 @@ npm install
 cp .env.example .env
 # .envファイルを編集して必要な環境変数を設定
 
-# MongoDB接続を有効化
-# src/index.jsの「MongoDBの接続をオプション化」セクションのコメントを解除
-# 以下の行を有効化：
-# await connectDB();
+# MongoDB接続を有効化する場合
+# .envファイルを編集してMongoDB関連の設定を行う
+# USE_MONGODB=true に変更
 
 # 開発サーバーを起動
 npm run dev

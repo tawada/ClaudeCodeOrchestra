@@ -74,11 +74,21 @@ mongosh
 
 ## ClaudeCodeOrchestra での MongoDB 設定
 
-1. `.env` ファイルでMongoDB接続文字列を設定
+1. `.env` ファイルでMongoDB接続を有効化し、接続文字列を設定
 ```
+USE_MONGODB=true
 MONGODB_URI=mongodb://localhost:27017/claudecodechestra
 ```
 
 2. `.env.example` ファイルを参考に必要な環境変数を設定
 
-3. アプリケーションを起動すると自動的にMongoDBに接続されます
+3. アプリケーションを起動すると、自動的にMongoDBに接続を試みます
+```
+npm start
+```
+
+4. 接続が成功すると以下のようなログが表示されます
+```
+MongoDBに接続しました。URI: mongodb://localhost:27017/claudecodechestra
+認証とセッション関連のAPIが有効になりました
+```
