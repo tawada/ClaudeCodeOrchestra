@@ -58,6 +58,27 @@ const api = {
         state.projects = data.data;
         renderProjects();
         hideLoading();
+        
+        // プロジェクトが0件の場合はガイダンスを表示
+        if (state.projects.length === 0) {
+          // プロジェクト作成フォームを強調
+          const formCard = document.querySelector('#content-projects .card');
+          if (formCard) {
+            formCard.style.boxShadow = '0 0 10px rgba(123, 31, 162, 0.5)';
+            formCard.style.animation = 'pulse 2s infinite';
+            
+            // スタイルを追加
+            const style = document.createElement('style');
+            style.textContent = `
+              @keyframes pulse {
+                0% { box-shadow: 0 0 10px rgba(123, 31, 162, 0.5); }
+                50% { box-shadow: 0 0 15px rgba(123, 31, 162, 0.8); }
+                100% { box-shadow: 0 0 10px rgba(123, 31, 162, 0.5); }
+              }
+            `;
+            document.head.appendChild(style);
+          }
+        }
       } else {
         showError(data.message || 'プロジェクト取得に失敗しました');
       }
@@ -446,14 +467,8 @@ function setupEventListeners() {
 document.addEventListener('DOMContentLoaded', () => {
   setupEventListeners();
   
-  // デモプロジェクトを自動作成（開発用）
-  if (state.projects.length === 0) {
-    api.createProject('デモプロジェクト', 'これはデモ用のプロジェクトです。').then(project => {
-      if (project) {
-        state.currentProject = project;
-      }
-    });
-  }
+  // プロジェクト一覧をロード
+  api.getProjects();
   
   // 初期タブ表示
   showTab('projects');

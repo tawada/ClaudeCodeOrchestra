@@ -94,6 +94,14 @@ main {
   padding-bottom: 8px;
 }
 
+.info-text {
+  margin-top: 15px;
+  padding: 8px;
+  background-color: rgba(33, 150, 243, 0.1);
+  border-radius: 4px;
+  color: var(--text-light);
+}
+
 .form-group {
   margin-bottom: 15px;
 }
