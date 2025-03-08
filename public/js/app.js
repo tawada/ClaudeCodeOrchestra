@@ -53,17 +53,30 @@ const api = {
   
   // 環境に応じたプレフィックスを取得
   getPrefix() {
-    // モック環境かどうかを判定
-    // サーバー側の環境変数USE_MONGODBがtrueの場合は本物のAPI
-    // falseの場合はモック
-    return this.mockPrefix;
+    // API状態を取得して、本番APIかモックAPIかを判断する
+    return fetch('/api/health')
+      .then(response => response.json())
+      .then(data => {
+        if (data && data.useMongoDb) {
+          console.log('本番APIを使用します');
+          return this.apiPrefix;
+        } else {
+          console.log('モックAPIを使用します');
+          return this.mockPrefix;
+        }
+      })
+      .catch(error => {
+        console.error('API状態取得エラー:', error);
+        return this.mockPrefix; // エラー時はモックにフォールバック
+      });
   },
   
   // プロジェクト関連
   async getProjects() {
     try {
       showLoading('プロジェクト一覧を取得中...');
-      const response = await fetch(`${this.getPrefix()}/projects`);
+      const prefix = await this.getPrefix();
+      const response = await fetch(`${prefix}/projects`);
       const data = await response.json();
       
       if (data.success) {
@@ -102,7 +115,8 @@ const api = {
   async createProject(name, description) {
     try {
       showLoading('プロジェクトを作成中...');
-      const response = await fetch(`${this.getPrefix()}/projects`, {
+      const prefix = await this.getPrefix();
+      const response = await fetch(`${prefix}/projects`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -132,7 +146,8 @@ const api = {
   async createSession(projectId, anthropicApiKey) {
     try {
       showLoading('セッションを開始中...');
-      const response = await fetch(`${this.getPrefix()}/sessions`, {
+      const prefix = await this.getPrefix();
+      const response = await fetch(`${prefix}/sessions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -164,7 +179,8 @@ const api = {
   async sendMessage(sessionId, message) {
     try {
       showLoading('メッセージを送信中...');
-      const response = await fetch(`${this.getPrefix()}/sessions/${sessionId}/message`, {
+      const prefix = await this.getPrefix();
+      const response = await fetch(`${prefix}/sessions/${sessionId}/message`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

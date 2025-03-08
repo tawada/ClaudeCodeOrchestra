@@ -16,6 +16,7 @@ const connectDB = async () => {
   try {
     const connectionString = process.env.MONGODB_URI || 'mongodb://localhost:27017/claudecodechestra';
     
+    logger.info(`MongoDB接続を試みます: ${connectionString}`);
     mongoose.set('strictQuery', false);
     
     const conn = await mongoose.connect(connectionString, {

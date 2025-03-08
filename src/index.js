@@ -54,6 +54,86 @@ app.get('/mobile', (req, res) => {
 // API共通ルート（認証不要）
 app.use('/api', apiRoutes); // 認証なしでアクセス可能なAPIルート
 
+// MongoDB無しで実際のAPIも動作するようにプロジェクトとセッションのルートを追加
+// これらは認証を必要としない簡易実装
+
+// プロジェクト
+app.get('/api/projects', (req, res) => {
+  res.status(200).json({
+    success: true,
+    data: []
+  });
+});
+
+app.post('/api/projects', (req, res) => {
+  const { name, description } = req.body;
+  const newProject = {
+    id: Date.now().toString(),
+    name,
+    description,
+    createdAt: new Date().toISOString()
+  };
+  
+  logger.info(`実際のAPIでプロジェクトを作成: ${name}`);
+  
+  res.status(201).json({
+    success: true,
+    data: newProject
+  });
+});
+
+// セッション
+app.post('/api/sessions', (req, res) => {
+  const { projectId, anthropicApiKey } = req.body;
+  
+  if (!projectId) {
+    return res.status(400).json({
+      success: false,
+      message: 'プロジェクトIDが必要です'
+    });
+  }
+  
+  const newSession = {
+    id: Date.now().toString(),
+    projectId,
+    status: 'active',
+    lastActive: new Date().toISOString(),
+    messages: []
+  };
+  
+  logger.info(`実際のAPIでセッションを作成: ${newSession.id}`);
+  
+  res.status(201).json({
+    success: true,
+    data: newSession
+  });
+});
+
+app.post('/api/sessions/:id/message', (req, res) => {
+  const { message } = req.body;
+  const sessionId = req.params.id;
+  
+  if (!message) {
+    return res.status(400).json({
+      success: false,
+      message: 'メッセージが必要です'
+    });
+  }
+  
+  // 実際のAPIレスポンス
+  const aiResponse = `これは実際のAPIからの応答です。あなたのメッセージ「${message}」を受け取りました。`;
+  
+  logger.info(`実際のAPIでメッセージを送信: ${sessionId}`);
+  
+  res.status(200).json({
+    success: true,
+    data: {
+      message: aiResponse,
+      sessionId
+    }
+  });
+});
+
 // 認証・セッション関連のAPIルートは動的に追加
 // .envのUSE_MONGODBフラグに基づいてstartServer()内で設定
 
@@ -72,6 +152,8 @@ const startServer = async () => {
     // .envからMongoDBの設定を読み込む
     const useMongoDb = process.env.USE_MONGODB === 'true';
     
+    logger.info(`USE_MONGODB設定: ${process.env.USE_MONGODB}, 比較結果: ${useMongoDb}`);
+    
     // MongoDBを使用する場合は接続
     if (useMongoDb) {
       try {
@@ -87,7 +169,7 @@ const startServer = async () => {
         logger.info('モックモードにフォールバックします');
       }
     } else {
-      logger.info('USE_MONGODB=falseのため、モックモードで起動します');
+      logger.info('USE_MONGODB=falseまたは設定されていないため、モックモードで起動します');
     }
     
     // サーバーリスニング開始

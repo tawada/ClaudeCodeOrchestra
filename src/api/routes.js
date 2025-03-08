@@ -11,10 +11,14 @@ const logger = require('../utils/logger');
 
 // ヘルスチェックエンドポイント
 router.get('/health', (req, res) => {
+  // MongoDBが使用されているかどうかのフラグを含める
+  const useMongoDb = process.env.USE_MONGODB === 'true';
+  
   res.status(200).json({
     success: true,
     message: 'API is running',
-    timestamp: Date.now()
+    timestamp: Date.now(),
+    useMongoDb: useMongoDb
   });
 });
 
