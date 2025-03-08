@@ -6,6 +6,9 @@
  * 2025-03-08: 実際のAnthropicAPIサポートを追加
  */
 
+// 環境変数を再ロード
+require('dotenv').config();
+
 const logger = require('./logger');
 const { connectDB, mongoose } = require('./database');
 const axios = require('axios');
@@ -13,6 +16,11 @@ const axios = require('axios');
 // .envから設定を読み込む
 const useRealAnthropicApi = process.env.USE_REAL_ANTHROPIC_API === 'true';
 const anthropicApiKey = process.env.ANTHROPIC_API_KEY || '';
+
+// 環境変数の状態をログ出力（デバッグ用）
+logger.info(`環境変数: USE_REAL_ANTHROPIC_API = ${process.env.USE_REAL_ANTHROPIC_API}`);
+logger.info(`変換後: useRealAnthropicApi = ${useRealAnthropicApi}`);
+logger.info(`ANTHROPIC_API_KEY存在: ${anthropicApiKey ? '有り' : '無し'}`);
 
 // 実際のAnthropicAPIを使用するクライアント
 const realClaudeCodeClient = {
@@ -139,13 +147,17 @@ const mockClaudeCodeClient = {
 };
 
 // 環境設定に基づいて適切なクライアントを選択
-const claudeCode = useRealAnthropicApi ? realClaudeCodeClient : mockClaudeCodeClient;
+// 明示的に環境変数の値をチェックしてクライアントを決定
+const claudeCode = process.env.USE_REAL_ANTHROPIC_API === 'true' ? 
+  realClaudeCodeClient : mockClaudeCodeClient;
 
 // 初期化時のログ出力
-if (useRealAnthropicApi) {
+if (process.env.USE_REAL_ANTHROPIC_API === 'true') {
   logger.info('実際のAnthropic APIを使用します (USE_REAL_ANTHROPIC_API=true)');
-  if (!anthropicApiKey) {
+  if (!process.env.ANTHROPIC_API_KEY) {
     logger.warn('ANTHROPIC_API_KEYが設定されていません。セッション作成時に提供されたAPIキーが使用されます。');
+  } else {
+    logger.info(`APIキーが設定されています: ${process.env.ANTHROPIC_API_KEY.substring(0, 10)}...`);
   }
 } else {
   logger.info('モックAnthropic APIを使用します (USE_REAL_ANTHROPIC_API=false)');
