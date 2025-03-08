@@ -92,3 +92,17 @@ npm start
 MongoDBに接続しました。URI: mongodb://localhost:27017/claudecodechestra
 認証とセッション関連のAPIが有効になりました
 ```
+
+## Anthropic APIの設定 (オプション)
+
+実際のClaudeを使用したい場合は、以下の設定を行います:
+
+1. Anthropicの[公式サイト](https://console.anthropic.com/)でAPIキーを取得
+
+2. `.env`ファイルに以下の設定を追加
+```
+ANTHROPIC_API_KEY=sk-ant-xxx...  # 取得したAPIキー
+USE_REAL_ANTHROPIC_API=true      # 実際のAPI使用を有効化
+```
+
+3. APIキーが設定されている場合、セッション作成時のAPIキー入力は省略可能になります

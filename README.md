@@ -23,6 +23,7 @@ ClaudeCodeOrchestrasは、1台のスマートフォンから複数のClaudeCode�
 
 - Node.js 16以上
 - MongoDB 5.0以上 ([インストール手順](MONGODB_INSTALL.md))
+- Anthropic API キー (オプション)
 
 ### アプリケーションのセットアップ
 
