@@ -19,6 +19,13 @@ ClaudeCodeOrchestrasは、1台のスマートフォンから複数のClaudeCode�
 
 ## インストール方法
 
+### 前提条件
+
+- Node.js 16以上
+- MongoDB 5.0以上 ([インストール手順](MONGODB_INSTALL.md))
+
+### アプリケーションのセットアップ
+
 ```bash
 # リポジトリをクローン
 git clone https://github.com/yourusername/claudecodechestra.git
@@ -31,8 +38,29 @@ npm install
 cp .env.example .env
 # .envファイルを編集して必要な環境変数を設定
 
+# MongoDB接続を有効化
+# src/index.jsの「MongoDBの接続をオプション化」セクションのコメントを解除
+# 以下の行を有効化：
+# await connectDB();
+
 # 開発サーバーを起動
 npm run dev
+```
+
+### MongoDB無しで実行する場合
+
+データベースがない環境でもデモ機能を試すことができます：
+
+```bash
+# 依存関係をインストール
+npm install
+
+# アプリケーションを起動
+npm start
+
+# ブラウザで以下にアクセス:
+# - http://localhost:3000      # メインページ
+# - http://localhost:3000/m    # モバイルインターフェース
 ```
 
 ## API エンドポイント

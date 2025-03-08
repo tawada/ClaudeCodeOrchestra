@@ -79,8 +79,9 @@ const startServer = async () => {
       logger.info(`注意: MongoDBへの接続はスキップされました。現在はメモリ内データのみで動作します。`);
     });
     
-    // MongoDBの接続をオプション化（開発環境では不要）
-    // 実際の環境で必要な場合はコメントを外してください
+    // MongoDBの接続をオプション化
+    // MongoDB を使用する場合はこのコメントを解除してください
+    // また、MongoDB のインストールが必要です（MONGODB_INSTALL.md 参照）
     // await connectDB();
   } catch (error) {
     logger.error(`サーバー起動エラー: ${error.message}`);
