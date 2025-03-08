@@ -14,6 +14,10 @@ sudo apt-get install -y mongodb-org
 # MongoDBサービスの開始と自動起動設定
 sudo systemctl start mongod
 sudo systemctl enable mongod
+
+# サービスとして登録せずに直接起動する場合
+mkdir -p /data/db
+mongod --bind_ip_all
 ```
 
 ## macOS での MongoDB インストール
@@ -25,6 +29,10 @@ brew install mongodb-community
 
 # MongoDBサービスの開始
 brew services start mongodb-community
+
+# サービスとして登録せずに直接起動する場合
+mkdir -p ~/data/db
+mongod --dbpath ~/data/db --bind_ip_all
 ```
 
 ## Windows での MongoDB インストール
@@ -34,6 +42,12 @@ brew services start mongodb-community
 3. 「Complete」設定でインストール
 4. 「Run service as Network Service user」と「Install MongoDB Compass」オプションを選択
 5. インストール完了後、サービスが自動的に起動します
+
+サービスとして登録せずに直接起動する場合:
+```
+md \data\db
+"C:\Program Files\MongoDB\Server\7.0\bin\mongod.exe" --dbpath=\data\db
+```
 
 ## Docker での MongoDB 実行
 
@@ -51,7 +65,7 @@ MongoDBが正常に動作しているか確認するには：
 
 ```bash
 # コマンドラインから確認
-mongo
+mongosh
 
 # 接続テスト
 > db.runCommand({ ping: 1 })
