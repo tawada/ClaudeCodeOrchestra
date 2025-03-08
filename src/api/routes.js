@@ -63,12 +63,15 @@ router.post('/mock/projects', (req, res) => {
 router.post('/mock/sessions', (req, res) => {
   const { projectId, anthropicApiKey } = req.body;
   
-  if (!projectId || !anthropicApiKey) {
+  if (!projectId) {
     return res.status(400).json({
       success: false,
-      message: 'プロジェクトIDとAPIキーが必要です'
+      message: 'プロジェクトIDが必要です'
     });
   }
+  
+  // APIキーのデフォルト値
+  const apiKey = anthropicApiKey || 'demo';
   
   const newSession = {
     id: Date.now().toString(),
@@ -115,7 +118,7 @@ router.post('/mock/sessions/:id/message', (req, res) => {
   });
   
   // AI応答を追加
-  const aiResponse = `これはモックレスポンスです。あなたのメッセージ「${message}」に対する応答です。`;
+  const aiResponse = `[モックAPI] これはデモ用の応答です。あなたのメッセージ「${message}」に対する応答です。`;
   session.messages.push({
     role: 'assistant',
     content: aiResponse,

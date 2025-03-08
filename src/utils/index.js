@@ -13,6 +13,11 @@ const { connectDB, mongoose } = require('./database');
 const claudeCode = {
   test: async ({ apiKey }) => {
     // APIキーの検証をシミュレート
+    // 「demo」というキーワードでもテスト成功とする（デモ用）
+    if (apiKey === 'demo') {
+      return { success: true, message: 'Demo mode activated' };
+    }
+    // 実際のAPIキーの場合は長さをチェック
     if (!apiKey || apiKey.length < 10) {
       return { success: false, message: 'Invalid API key' };
     }
@@ -23,6 +28,15 @@ const claudeCode = {
     // メッセージ送信をシミュレート
     if (!apiKey || !sessionId || !message) {
       throw new Error('Required parameters missing');
+    }
+    
+    // デモモードのレスポンス
+    if (apiKey === 'demo') {
+      // デモモード用の応答を返す
+      return {
+        message: `[デモモード] これはClaudeCodeのシミュレーション応答です。あなたのメッセージ: "${message}"`,
+        sessionId: sessionId
+      };
     }
     
     // 実際の実装では、ClaudeCodeAPIを呼び出します
