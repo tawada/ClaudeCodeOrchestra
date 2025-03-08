@@ -56,12 +56,19 @@ app.use('/api', apiRoutes); // 認証なしでアクセス可能なAPIルート
 
 // MongoDB無しで実際のAPIも動作するようにプロジェクトとセッションのルートを追加
 // これらは認証を必要としない簡易実装
+// メモリ内にデータを保持するためのストア
+const memoryStore = {
+  projects: [],
+  sessions: [],
+  messages: {}
+};
 
 // プロジェクト
 app.get('/api/projects', (req, res) => {
+  logger.info('実際のAPIからプロジェクト一覧を取得');
   res.status(200).json({
     success: true,
-    data: []
+    data: memoryStore.projects
   });
 });
 
@@ -73,6 +80,9 @@ app.post('/api/projects', (req, res) => {
     description,
     createdAt: new Date().toISOString()
   };
+  
+  // メモリ内ストアに保存
+  memoryStore.projects.push(newProject);
   
   logger.info(`実際のAPIでプロジェクトを作成: ${name}`);
   
@@ -93,6 +103,15 @@ app.post('/api/sessions', (req, res) => {
     });
   }
   
+  // プロジェクトの存在確認
+  const project = memoryStore.projects.find(p => p.id === projectId);
+  if (!project) {
+    return res.status(404).json({
+      success: false,
+      message: '指定されたプロジェクトが見つかりません'
+    });
+  }
+  
   const newSession = {
     id: Date.now().toString(),
     projectId,
@@ -101,11 +120,23 @@ app.post('/api/sessions', (req, res) => {
     messages: []
   };
   
-  logger.info(`実際のAPIでセッションを作成: ${newSession.id}`);
+  // メモリ内ストアに保存
+  memoryStore.sessions.push(newSession);
+  memoryStore.messages[newSession.id] = [];
+  
+  logger.info(`実際のAPIでセッションを作成: ${newSession.id} (プロジェクト: ${project.name})`);
   
   res.status(201).json({
     success: true,
     data: newSession
+  });
+});
+
+app.get('/api/sessions', (req, res) => {
+  logger.info('実際のAPIからセッション一覧を取得');
+  res.status(200).json({
+    success: true,
+    data: memoryStore.sessions
   });
 });
 
@@ -120,10 +151,44 @@ app.post('/api/sessions/:id/message', (req, res) => {
     });
   }
   
-  // 実際のAPIレスポンス
-  const aiResponse = `これは実際のAPIからの応答です。あなたのメッセージ「${message}」を受け取りました。`;
+  // セッションの存在確認
+  const session = memoryStore.sessions.find(s => s.id === sessionId);
+  if (!session) {
+    return res.status(404).json({
+      success: false,
+      message: '指定されたセッションが見つかりません'
+    });
+  }
   
-  logger.info(`実際のAPIでメッセージを送信: ${sessionId}`);
+  // ユーザーメッセージを保存
+  const userMessage = {
+    role: 'user',
+    content: message,
+    timestamp: new Date().toISOString()
+  };
+  
+  // 実際のAPIレスポンス
+  const aiResponse = `これは実際のAPIからの応答です。あなたのメッセージ「${message}」を受け取りました。ClaudeCodeOrchestraを使ってモバイルからの開発が進められています。`;
+  
+  // アシスタントメッセージを保存
+  const assistantMessage = {
+    role: 'assistant',
+    content: aiResponse,
+    timestamp: new Date().toISOString()
+  };
+  
+  // メッセージをメモリ内ストアに保存
+  if (!memoryStore.messages[sessionId]) {
+    memoryStore.messages[sessionId] = [];
+  }
+  
+  memoryStore.messages[sessionId].push(userMessage, assistantMessage);
+  
+  // セッション情報を更新
+  session.lastActive = new Date().toISOString();
+  session.messages = memoryStore.messages[sessionId];
+  
+  logger.info(`実際のAPIでメッセージを送信: セッション ${sessionId}`);
   
   res.status(200).json({
     success: true,
@@ -131,6 +196,26 @@ app.post('/api/sessions/:id/message', (req, res) => {
       message: aiResponse,
       sessionId
     }
+  });
+});
+
+app.get('/api/sessions/:id', (req, res) => {
+  const sessionId = req.params.id;
+  const session = memoryStore.sessions.find(s => s.id === sessionId);
+  
+  if (!session) {
+    return res.status(404).json({
+      success: false,
+      message: '指定されたセッションが見つかりません'
+    });
+  }
+  
+  // セッションデータにメッセージを含める
+  session.messages = memoryStore.messages[sessionId] || [];
+  
+  res.status(200).json({
+    success: true,
+    data: session
   });
 });
 
