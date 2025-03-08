@@ -47,11 +47,23 @@ const elements = {
 
 // API関連の関数
 const api = {
+  // APIエンドポイントのプレフィックス
+  apiPrefix: '/api',
+  mockPrefix: '/api/mock',
+  
+  // 環境に応じたプレフィックスを取得
+  getPrefix() {
+    // モック環境かどうかを判定
+    // サーバー側の環境変数USE_MONGODBがtrueの場合は本物のAPI
+    // falseの場合はモック
+    return this.mockPrefix;
+  },
+  
   // プロジェクト関連
   async getProjects() {
     try {
       showLoading('プロジェクト一覧を取得中...');
-      const response = await fetch('/api/mock/projects');
+      const response = await fetch(`${this.getPrefix()}/projects`);
       const data = await response.json();
       
       if (data.success) {
@@ -90,7 +102,7 @@ const api = {
   async createProject(name, description) {
     try {
       showLoading('プロジェクトを作成中...');
-      const response = await fetch('/api/mock/projects', {
+      const response = await fetch(`${this.getPrefix()}/projects`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -120,7 +132,7 @@ const api = {
   async createSession(projectId, anthropicApiKey) {
     try {
       showLoading('セッションを開始中...');
-      const response = await fetch('/api/mock/sessions', {
+      const response = await fetch(`${this.getPrefix()}/sessions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -152,7 +164,7 @@ const api = {
   async sendMessage(sessionId, message) {
     try {
       showLoading('メッセージを送信中...');
-      const response = await fetch(`/api/mock/sessions/${sessionId}/message`, {
+      const response = await fetch(`${this.getPrefix()}/sessions/${sessionId}/message`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

@@ -55,12 +55,17 @@ npm run dev
 # 依存関係をインストール
 npm install
 
+# 実際のAnthropicAPIを使用する場合
+# .envファイルを編集して以下を設定:
+# ANTHROPIC_API_KEY=sk-ant-xxxxx...（実際のAPIキー）
+# USE_REAL_ANTHROPIC_API=true
+
 # アプリケーションを起動
 npm start
 
 # ブラウザで以下にアクセス:
-# - http://localhost:3000      # メインページ
-# - http://localhost:3000/m    # モバイルインターフェース
+# - http://localhost:5000      # メインページ（ポート番号はデフォルトが5000）
+# - http://localhost:5000/m    # モバイルインターフェース
 ```
 
 ## API エンドポイント

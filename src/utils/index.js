@@ -19,10 +19,14 @@ const realClaudeCodeClient = {
   test: async ({ apiKey }) => {
     try {
       // APIキーを使って軽いリクエストを送信してテスト
+      const apiKeyToUse = apiKey || anthropicApiKey;
+      
+      logger.info(`Anthropic APIテスト実行中... APIキー: ${apiKeyToUse.substring(0, 10)}...`);
+      
       const response = await axios.post(
         'https://api.anthropic.com/v1/messages',
         {
-          model: 'claude-3-opus-20240229',
+          model: 'claude-3-sonnet-20240229',
           max_tokens: 10,
           messages: [
             { role: 'user', content: 'Hello, this is a test. Please respond with OK.' }
@@ -31,7 +35,7 @@ const realClaudeCodeClient = {
         {
           headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey || anthropicApiKey,
+            'anthropic-api-key': apiKeyToUse,
             'anthropic-version': '2023-06-01'
           }
         }
@@ -62,18 +66,21 @@ const realClaudeCodeClient = {
         formattedMessages.push({ role: 'user', content: message });
       }
       
+      const apiKeyToUse = apiKey || anthropicApiKey;
+      logger.info(`Anthropic APIメッセージ送信... APIキー: ${apiKeyToUse.substring(0, 10)}...`);
+      
       // APIリクエスト
       const response = await axios.post(
         'https://api.anthropic.com/v1/messages',
         {
-          model: 'claude-3-haiku-20240307',
+          model: 'claude-3-sonnet-20240229',
           max_tokens: 4000,
           messages: formattedMessages
         },
         {
           headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey || anthropicApiKey,
+            'anthropic-api-key': apiKeyToUse,
             'anthropic-version': '2023-06-01'
           }
         }
