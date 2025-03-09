@@ -204,7 +204,7 @@ app.get('/api/sessions', (req, res) => {
   });
 });
 
-app.post('/api/sessions/:id/message', (req, res) => {
+app.post('/api/sessions/:id/message', async (req, res) => {
   const { message } = req.body;
   const sessionId = req.params.id;
   
