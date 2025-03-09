@@ -14,6 +14,7 @@ const authRoutes = require('./auth/routes');
 const apiRoutes = require('./api/routes');
 const sessionRoutes = require('./sessions/routes');
 const { connectDB } = require('./utils/database');
+const axios = require('axios');
 
 // 環境変数の設定
 dotenv.config();
@@ -62,6 +63,63 @@ const memoryStore = {
   sessions: [],
   messages: {}
 };
+
+// ClaudeCodeを使ったAI応答生成
+async function generateClaudeResponse(sessionId, message, context) {
+  try {
+    // Anthropic APIを使用するためのキーが有効かチェック
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey || !apiKey.startsWith('sk-ant')) {
+      return `デモモード: ClaudeCodeに接続できませんでした。有効なAPIキーがありません。「${message}」に対する回答を生成できません。`;
+    }
+
+    // Anthropic APIリクエスト用のヘッダー
+    const headers = {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01'
+    };
+
+    // Anthropic APIリクエスト用のボディ
+    const body = {
+      model: 'claude-3-opus-20240229',
+      max_tokens: 1024,
+      messages: [
+        {
+          role: 'system',
+          content: `あなたはClaudeCodeOrchestraというモバイルアプリのAIアシスタントです。
+以下のプロジェクト情報を元に、ユーザーの質問に答えてください:
+- プロジェクト名: ${context.projectName || '不明'}
+- セッションID: ${sessionId}
+- メッセージ数: ${context.messageCount || 0}
+
+簡潔かつ役立つ回答を心がけてください。最初のメッセージには挨拶を含め、その後は直接質問に答えてください。
+ClaudeCodeOrchestraは複数のClaudeCodeインスタンスを管理し、モバイルから開発作業を行うためのツールです。`
+        },
+        ...context.messageHistory.map(msg => ({
+          role: msg.role,
+          content: msg.content
+        })),
+        {
+          role: 'user',
+          content: message
+        }
+      ],
+      temperature: 0.7,
+      stream: false
+    };
+
+    // Anthropic APIにリクエストを送信
+    const response = await axios.post('https://api.anthropic.com/v1/messages', body, { headers });
+    
+    // レスポンスから応答テキストを抽出
+    return response.data.content[0].text;
+  } catch (error) {
+    logger.error(`Claude API呼び出しエラー: ${error.message}`);
+    // エラー時のフォールバック応答
+    return `申し訳ありません。API呼び出し中にエラーが発生しました: ${error.message}。現在はデモモードで応答します。`;
+  }
+}
 
 // プロジェクト
 app.get('/api/projects', (req, res) => {
@@ -181,34 +239,56 @@ app.post('/api/sessions/:id/message', (req, res) => {
     memoryStore.messages[sessionId] = [];
   }
   
-  // 会話の進行状況に応じた応答を生成
-  let aiResponse;
+  // 会話コンテキストの作成
   const messageCount = memoryStore.messages[sessionId].filter(m => m.role === 'user').length;
+  const context = {
+    projectName: project ? project.name : '不明',
+    messageCount: messageCount,
+    messageHistory: memoryStore.messages[sessionId]
+  };
   
-  if (messageCount === 0) {
-    // 最初のメッセージの場合
-    aiResponse = `こんにちは！ClaudeCodeOrchestra（プロジェクト: ${project ? project.name : '不明'}）へようこそ。あなたのメッセージ「${message}」を受け取りました。どのようなお手伝いが必要ですか？`;
-  } else if (message.includes('機能') || message.includes('できること')) {
-    // 機能についての質問
-    aiResponse = `ClaudeCodeOrchestraでは以下のことができます：
+  // ClaudeCodeを使ってAI応答を生成
+  let aiResponse;
+  
+  try {
+    // 実際のAPIを使用する場合（APIキーが有効な場合）
+    if (process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY.startsWith('sk-ant')) {
+      // Anthropic APIを使った応答生成を試みる
+      aiResponse = await generateClaudeResponse(sessionId, message, context);
+    } else {
+      // APIキーがない場合はフォールバック応答
+      logger.info('有効なAPIキーがないため、フォールバック応答を使用します');
+      
+      if (messageCount === 0) {
+        // 最初のメッセージの場合
+        aiResponse = `こんにちは！ClaudeCodeOrchestra（プロジェクト: ${project ? project.name : '不明'}）へようこそ。あなたのメッセージ「${message}」を受け取りました。どのようなお手伝いが必要ですか？`;
+      } else if (message.includes('機能') || message.includes('できること')) {
+        // 機能についての質問
+        aiResponse = `ClaudeCodeOrchestraでは以下のことができます：
 1. 複数のClaudeCodeインスタンスを一元管理
 2. モバイルからの開発環境アクセス
 3. プロジェクト間の切り替えとセッション管理
 4. 進行中の開発タスクのモニタリング
 
 現在、「${project ? project.name : '不明'}」プロジェクトのセッションで作業中です。`;
-  } else if (message.includes('使い方') || message.includes('ヘルプ')) {
-    // ヘルプ要求
-    aiResponse = `ClaudeCodeOrchestraの基本的な使い方：
+      } else if (message.includes('使い方') || message.includes('ヘルプ')) {
+        // ヘルプ要求
+        aiResponse = `ClaudeCodeOrchestraの基本的な使い方：
 1. プロジェクトを作成または選択
 2. セッションを開始（APIキーは環境変数から自動取得可能）
 3. チャットでClaude AIと対話
 4. 複数のプロジェクトを並行して管理可能
 
 何か具体的な質問があればお知らせください。`;
-  } else {
-    // 通常の応答
-    aiResponse = `これは「${project ? project.name : '不明'}」プロジェクトのセッションからの応答です。あなたのメッセージ「${message}」を受け取りました。ClaudeCodeOrchestraを使ってモバイルからの開発が進められています。どうぞ続けてください。`;
+      } else {
+        // 通常の応答
+        aiResponse = `これは「${project ? project.name : '不明'}」プロジェクトのセッションからの応答です。あなたのメッセージ「${message}」を受け取りました。ClaudeCodeOrchestraを使ってモバイルからの開発が進められています。どうぞ続けてください。[デモモード]`;
+      }
+    }
+  } catch (error) {
+    // エラー時のフォールバック
+    logger.error(`AI応答生成エラー: ${error.message}`);
+    aiResponse = `申し訳ありません。応答生成中にエラーが発生しました: ${error.message}。現在はデモモードで応答します。`;
   }
   
   // アシスタントメッセージを作成
