@@ -31,9 +31,14 @@ app.use(express.urlencoded({ extended: true }));
 // 静的ファイルの提供 (フロントエンド)
 app.use(express.static('public'));
 
-// m.htmlへのショートカットルート
+// モバイルページへのショートカットルート
 app.get('/m', (req, res) => {
-  res.redirect('/m.html');
+  res.redirect('/mobile.html');
+});
+
+// 古いm.htmlへのアクセスも全てmobile.htmlへリダイレクト
+app.get('/m.html', (req, res) => {
+  res.redirect('/mobile.html');
 });
 
 // モバイルインターフェースへのルート（明示的にファイルを送信）
