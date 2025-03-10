@@ -85,14 +85,13 @@ async function generateClaudeResponse(sessionId, message, context) {
       'anthropic-version': '2023-06-01'
     };
 
-    // Anthropic APIリクエスト用のボディ
-    const body = {
-      model: 'claude-3-opus-20240229',
-      max_tokens: 1024,
-      messages: [
-        {
-          role: 'system',
-          content: `あなたはClaudeCodeOrchestraというモバイルアプリのAIアシスタントです。
+    // メッセージ履歴を整形
+    const formattedMessages = [];
+    
+    // システムメッセージを追加
+    formattedMessages.push({
+      role: 'system',
+      content: `あなたはClaudeCodeOrchestraというモバイルアプリのAIアシスタントです。
 以下のプロジェクト情報を元に、ユーザーの質問に答えてください:
 - プロジェクト名: ${context.projectName || '不明'}
 - セッションID: ${sessionId}
@@ -100,16 +99,38 @@ async function generateClaudeResponse(sessionId, message, context) {
 
 簡潔かつ役立つ回答を心がけてください。最初のメッセージには挨拶を含め、その後は直接質問に答えてください。
 ClaudeCodeOrchestraは複数のClaudeCodeインスタンスを管理し、モバイルから開発作業を行うためのツールです。`
-        },
-        ...context.messageHistory.map(msg => ({
+    });
+    
+    // 既存のメッセージを追加（空の場合はスキップ）
+    if (context.messageHistory && context.messageHistory.length > 0) {
+      // 有効なロールとコンテンツを持つメッセージのみをフィルタリング
+      const validMessages = context.messageHistory.filter(msg => 
+        msg && msg.role && msg.content && 
+        (msg.role === 'user' || msg.role === 'assistant')
+      );
+      
+      // 最大5個の最近のメッセージを使用
+      const recentMessages = validMessages.slice(-5);
+      
+      recentMessages.forEach(msg => {
+        formattedMessages.push({
           role: msg.role,
           content: msg.content
-        })),
-        {
-          role: 'user',
-          content: message
-        }
-      ],
+        });
+      });
+    }
+    
+    // 現在のユーザーメッセージを追加
+    formattedMessages.push({
+      role: 'user',
+      content: message
+    });
+    
+    // Anthropic APIリクエスト用のボディ
+    const body = {
+      model: 'claude-3-sonnet-20240229',
+      max_tokens: 1024,
+      messages: formattedMessages,
       temperature: 0.7,
       stream: false
     };
