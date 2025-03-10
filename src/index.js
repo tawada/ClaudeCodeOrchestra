@@ -78,12 +78,23 @@ async function generateClaudeResponse(sessionId, message, context) {
       return `デモモード: ClaudeCodeに接続できませんでした。有効なAPIキーがありません。「${message}」に対する回答を生成できません。`;
     }
 
-    // Anthropic APIリクエスト用のヘッダー
+    // Anthropic APIリクエスト用のヘッダー (2024年最新バージョン)
     const headers = {
       'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01'
+      'anthropic-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'x-api-key': apiKey, // 後方互換性のために両方のヘッダーを送信
     };
+
+    // システムプロンプトを作成
+    const systemPrompt = `あなたはClaudeCodeOrchestraというモバイルアプリのAIアシスタントです。
+以下のプロジェクト情報を元に、ユーザーの質問に答えてください:
+- プロジェクト名: ${context.projectName || '不明'}
+- セッションID: ${sessionId}
+- メッセージ数: ${context.messageCount || 0}
+
+簡潔かつ役立つ回答を心がけてください。最初のメッセージには挨拶を含め、その後は直接質問に答えてください。
+ClaudeCodeOrchestraは複数のClaudeCodeインスタンスを管理し、モバイルから開発作業を行うためのツールです。`;
 
     // メッセージ履歴を整形
     const formattedMessages = [];
@@ -91,33 +102,34 @@ async function generateClaudeResponse(sessionId, message, context) {
     // システムメッセージを追加
     formattedMessages.push({
       role: 'system',
-      content: `あなたはClaudeCodeOrchestraというモバイルアプリのAIアシスタントです。
-以下のプロジェクト情報を元に、ユーザーの質問に答えてください:
-- プロジェクト名: ${context.projectName || '不明'}
-- セッションID: ${sessionId}
-- メッセージ数: ${context.messageCount || 0}
-
-簡潔かつ役立つ回答を心がけてください。最初のメッセージには挨拶を含め、その後は直接質問に答えてください。
-ClaudeCodeOrchestraは複数のClaudeCodeインスタンスを管理し、モバイルから開発作業を行うためのツールです。`
+      content: systemPrompt
     });
     
     // 既存のメッセージを追加（空の場合はスキップ）
     if (context.messageHistory && context.messageHistory.length > 0) {
-      // 有効なロールとコンテンツを持つメッセージのみをフィルタリング
-      const validMessages = context.messageHistory.filter(msg => 
-        msg && msg.role && msg.content && 
-        (msg.role === 'user' || msg.role === 'assistant')
-      );
-      
-      // 最大5個の最近のメッセージを使用
-      const recentMessages = validMessages.slice(-5);
-      
-      recentMessages.forEach(msg => {
-        formattedMessages.push({
-          role: msg.role,
-          content: msg.content
+      try {
+        // 有効なロールとコンテンツを持つメッセージのみをフィルタリング
+        const validMessages = context.messageHistory.filter(msg => 
+          msg && msg.role && msg.content && 
+          (msg.role === 'user' || msg.role === 'assistant')
+        );
+        
+        // 最大3個の最近のメッセージを使用（コンテキスト制限に対応）
+        const recentMessages = validMessages.slice(-3);
+        
+        recentMessages.forEach(msg => {
+          // 文字列以外のコンテンツがある場合はスキップ
+          if (typeof msg.content === 'string') {
+            formattedMessages.push({
+              role: msg.role,
+              content: msg.content
+            });
+          }
         });
-      });
+      } catch (err) {
+        logger.error(`メッセージ履歴処理エラー: ${err.message}`);
+        // エラーが発生した場合は履歴を使わない
+      }
     }
     
     // 現在のユーザーメッセージを追加
@@ -126,20 +138,61 @@ ClaudeCodeOrchestraは複数のClaudeCodeインスタンスを管理し、モバ
       content: message
     });
     
+    // 利用可能なモデルを複数用意し、順次試行できるようにする
+    const models = [
+      'claude-3-sonnet-20240229',
+      'claude-3-haiku-20240307',
+      'claude-3-opus-20240229',
+      'claude-2.1'
+    ];
+    
     // Anthropic APIリクエスト用のボディ
     const body = {
-      model: 'claude-3-sonnet-20240229',
+      model: models[0], // 最初のモデルを使用
       max_tokens: 1024,
       messages: formattedMessages,
-      temperature: 0.7,
-      stream: false
+      temperature: 0.7
     };
 
-    // Anthropic APIにリクエストを送信
-    const response = await axios.post('https://api.anthropic.com/v1/messages', body, { headers });
+    // 情報をログに記録
+    logger.info(`Claude API呼び出し: モデル=${body.model}`);
     
-    // レスポンスから応答テキストを抽出
-    return response.data.content[0].text;
+    try {
+      // Anthropic APIにリクエストを送信
+      const response = await axios.post('https://api.anthropic.com/v1/messages', body, { 
+        headers,
+        timeout: 30000 // 30秒タイムアウト
+      });
+      
+      // レスポンスから応答テキストを抽出
+      return response.data.content[0].text;
+    } catch (apiError) {
+      // モデルエラーの場合は代替モデルを試す
+      if (apiError.response && (apiError.response.status === 400 || apiError.response.status === 404) && models.length > 1) {
+        logger.warn(`モデル ${body.model} でエラーが発生しました。別のモデルを試行します。`);
+        
+        // 次のモデルを試す
+        for (let i = 1; i < models.length; i++) {
+          try {
+            body.model = models[i];
+            logger.info(`代替モデル試行: ${body.model}`);
+            
+            const retryResponse = await axios.post('https://api.anthropic.com/v1/messages', body, { 
+              headers,
+              timeout: 30000
+            });
+            
+            return retryResponse.data.content[0].text;
+          } catch (retryError) {
+            logger.error(`代替モデル ${body.model} でもエラー: ${retryError.message}`);
+            // 次のモデルへ続行
+          }
+        }
+      }
+      
+      // すべての試行が失敗した場合は元のエラーを投げる
+      throw apiError;
+    }
   } catch (error) {
     logger.error(`Claude API呼び出しエラー: ${error.message}`);
     // エラー時のフォールバック応答
