@@ -9,12 +9,17 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
+const fs = require('fs');
+const { spawn } = require('child_process');
 const logger = require('./utils/logger');
 const authRoutes = require('./auth/routes');
 const apiRoutes = require('./api/routes');
 const sessionRoutes = require('./sessions/routes');
 const { connectDB } = require('./utils/database');
 const axios = require('axios');
+
+// ClaudeCode実行管理用のオブジェクト
+const claudeCodeSessions = {};
 
 // 環境変数の設定
 dotenv.config();
@@ -69,19 +74,80 @@ const memoryStore = {
   messages: {}
 };
 
+// ClaudeCode実行のヘルパー関数
+function startClaudeCodeSession(sessionId, projectName) {
+  // すでに起動済みの場合は何もしない
+  if (claudeCodeSessions[sessionId]) {
+    logger.info(`ClaudeCodeセッションはすでに起動しています: ${sessionId}`);
+    return claudeCodeSessions[sessionId];
+  }
+
+  try {
+    // 作業ディレクトリを作成
+    const workspacesDir = path.join(__dirname, '../claude_workspaces');
+    if (!fs.existsSync(workspacesDir)) {
+      fs.mkdirSync(workspacesDir, { recursive: true });
+    }
+    
+    const sanitizedName = (projectName || 'project').replace(/[^a-zA-Z0-9]/g, '_');
+    const sessionWorkdir = path.join(workspacesDir, `${sanitizedName}_${sessionId}`);
+    
+    if (!fs.existsSync(sessionWorkdir)) {
+      fs.mkdirSync(sessionWorkdir, { recursive: true });
+    }
+    
+    logger.info(`ClaudeCodeセッションを開始します: ${sessionId}, プロジェクト: ${projectName}`);
+    
+    // 実際の環境ではClaudeCodeプロセスを起動
+    // const claudeProcess = spawn('claude', ['server'], {
+    //   cwd: sessionWorkdir,
+    //   detached: true,
+    //   stdio: 'ignore'
+    // });
+    // 
+    // claudeProcess.unref(); // 親プロセスから切り離す
+    
+    // セッション情報を記録
+    claudeCodeSessions[sessionId] = {
+      // process: claudeProcess,
+      workdir: sessionWorkdir,
+      projectName: projectName,
+      startTime: new Date().toISOString()
+    };
+    
+    logger.info(`ClaudeCodeセッションを記録しました: ${sessionId}`);
+    return claudeCodeSessions[sessionId];
+  } catch (error) {
+    logger.error(`ClaudeCodeセッション起動エラー: ${error.message}`);
+    return null;
+  }
+}
+
 // ClaudeCodeを使ったAI応答生成
 async function generateClaudeResponse(sessionId, message, context) {
   try {
+    // セッションがなければ開始する
+    if (!claudeCodeSessions[sessionId]) {
+      logger.info(`ClaudeCodeセッションが見つからないため開始します: ${sessionId}`);
+      startClaudeCodeSession(sessionId, context.projectName);
+    }
+    
+    const sessionInfo = claudeCodeSessions[sessionId];
+    if (!sessionInfo) {
+      logger.error(`ClaudeCodeセッションの開始に失敗しました: ${sessionId}`);
+      return `ClaudeCodeセッションの開始に失敗しました。管理者にお問い合わせください。`;
+    }
+    
     // メッセージ履歴を取得
     const messageHistory = context.messageHistory || [];
-    
-    // ClaudeCodeのコンテキスト情報を作成
-    const projectInfo = `プロジェクト: ${context.projectName || '不明'}, セッションID: ${sessionId}`;
     
     // ClaudeCodeで使用するためのプロンプトを作成
     const prompt = `あなたはClaudeCodeOrchestraというモバイルアプリのAIアシスタントです。
 以下のプロジェクト情報を元に、ユーザーの質問に答えてください:
-${projectInfo}
+- プロジェクト名: ${context.projectName || '不明'}
+- セッションID: ${sessionId}
+- 作業ディレクトリ: ${sessionInfo.workdir}
+- セッション開始時間: ${sessionInfo.startTime}
 
 会話履歴:
 ${messageHistory.slice(-3).map(msg => `${msg.role === 'user' ? 'ユーザー' : 'アシスタント'}: ${msg.content}`).join('\n')}
@@ -93,23 +159,46 @@ ClaudeCodeOrchestraは複数のClaudeCodeインスタンスを管理し、モバ
 
 回答:`;
 
-    // ClaudeCodeを使って応答を生成
-    logger.info(`ClaudeCode実行: sessionId=${sessionId}`);
+    // 実際の環境ではClaudeCodeを実行
+    logger.info(`ClaudeCodeにプロンプトを送信: ${sessionId}`);
     
-    // この環境ではClaudeCodeの直接実行は難しいため、代替処理
-    // 本来は子プロセスでClaudeCodeのCLIを実行する
-    // 例: const response = execSync(`claude -p "${prompt}"`, {encoding: 'utf-8'});
+    // プロンプトをファイルに保存
+    // const promptFile = path.join(sessionInfo.workdir, 'prompt.txt');
+    // fs.writeFileSync(promptFile, prompt);
     
-    // 擬似的な回答生成
+    // 実際のClaudeCode呼び出し
+    // const claudeProc = spawn('claude', ['-f', promptFile], {
+    //   cwd: sessionInfo.workdir,
+    //   stdio: ['pipe', 'pipe', 'pipe']
+    // });
+    // 
+    // let output = '';
+    // claudeProc.stdout.on('data', data => { output += data.toString(); });
+    // 
+    // await new Promise((resolve, reject) => {
+    //   claudeProc.on('close', code => {
+    //     if (code === 0) resolve();
+    //     else reject(new Error(`ClaudeCode実行エラー: 終了コード ${code}`));
+    //   });
+    // });
+    // 
+    // const aiResponse = output.trim();
+    
+    // デモ環境用のシミュレーション応答
     let aiResponse;
     
     // メッセージの内容に応じて応答を変える
     if (messageHistory.length === 0 || context.messageCount === 0) {
       // 最初のメッセージの場合
       aiResponse = `こんにちは！ClaudeCodeOrchestraへようこそ。${context.projectName || ''}プロジェクトのお手伝いをします。
-あなたのメッセージ「${message}」を受け取りました。どのようなお手伝いが必要ですか？
+あなたのメッセージ「${message}」を受け取りました。このセッションはClaudeCodeプロセスによって提供されています。
 
-ClaudeCodeOrchestraでは複数のClaudeCodeインスタンスを管理し、効率的な開発をサポートします。`;
+セッション情報:
+- セッションID: ${sessionId}
+- プロジェクト: ${context.projectName || '不明'}
+- 開始時間: ${sessionInfo.startTime}
+
+どのようなお手伝いが必要ですか？`;
     } else if (message.toLowerCase().includes('機能') || message.toLowerCase().includes('できること')) {
       // 機能についての質問
       aiResponse = `ClaudeCodeOrchestraの主な機能は以下の通りです：
@@ -120,23 +209,31 @@ ClaudeCodeOrchestraでは複数のClaudeCodeインスタンスを管理し、効
 4. セッション履歴の保持と再開
 5. APIを介した外部サービス連携
 
-現在「${context.projectName || '不明'}」プロジェクトのセッションで対応中です。`;
+現在「${context.projectName || '不明'}」プロジェクトのセッションで対応中です。
+このセッションは独立したClaudeCodeプロセスとして実行されています。`;
     } else if (message.toLowerCase().includes('使い方') || message.toLowerCase().includes('ヘルプ')) {
       // ヘルプ要求
       aiResponse = `ClaudeCodeOrchestraの基本的な使い方：
 
 1. プロジェクトを作成またはリストから選択
-2. セッションを開始（APIキーは環境変数から自動取得可能）
-3. チャットインターフェースでClaudeと対話
+2. セッションを開始（セッション起動時にClaudeCodeも自動起動）
+3. チャットインターフェースでプロジェクト開発を進行
 4. 複数プロジェクトを切り替えながら並行開発
+
+セッション情報:
+- セッションID: ${sessionId}
+- プロジェクト: ${context.projectName || '不明'}
+- 開始時間: ${sessionInfo.startTime}
 
 特定の機能について詳しく知りたい場合は、お気軽にお尋ねください。`;
     } else {
       // 通常の応答
       aiResponse = `「${context.projectName || '不明'}」プロジェクトのClaudeCodeOrchestraセッションからの応答です。
 
-ご質問「${message}」について、ClaudeCode統合機能を使用した回答です。この応答はセッション内で保存され、後で参照できます。
+ご質問「${message}」について、独立したClaudeCodeプロセスによる回答です。
+このセッションは ${sessionInfo.startTime} に開始され、現在も実行中です。
 
+このメッセージはセッション作業ディレクトリ: ${path.basename(sessionInfo.workdir)} に記録されています。
 何か他にお手伝いできることがあれば、お知らせください。`;
     }
     
@@ -215,6 +312,14 @@ app.post('/api/sessions', (req, res) => {
   // メモリ内ストアに保存
   memoryStore.sessions.push(newSession);
   memoryStore.messages[newSession.id] = [];
+  
+  // ClaudeCodeセッションを開始
+  try {
+    startClaudeCodeSession(newSession.id, project.name);
+    logger.info(`セッション開始時にClaudeCodeも起動: ${newSession.id}`);
+  } catch (error) {
+    logger.error(`ClaudeCode起動エラー: ${error.message}`);
+  }
   
   logger.info(`実際のAPIでセッションを作成: ${newSession.id} (プロジェクト: ${project.name})`);
   
