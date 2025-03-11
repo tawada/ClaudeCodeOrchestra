@@ -21,6 +21,61 @@ const axios = require('axios');
 // ClaudeCode実行管理用のオブジェクト
 const claudeCodeSessions = {};
 
+// セッションデータの永続化と復元用の関数
+function saveSessionsToFile() {
+  const sessionsDataDir = path.join(__dirname, '../data/sessions');
+  if (!fs.existsSync(sessionsDataDir)) {
+    fs.mkdirSync(sessionsDataDir, { recursive: true });
+  }
+  
+  const sessionsDataPath = path.join(sessionsDataDir, 'sessions.json');
+  
+  try {
+    // memoryStoreとclaudeCodeSessionsの状態を保存
+    const dataToSave = {
+      memoryStore: memoryStore,
+      claudeCodeSessions: claudeCodeSessions,
+      savedAt: new Date().toISOString()
+    };
+    
+    fs.writeFileSync(sessionsDataPath, JSON.stringify(dataToSave, null, 2));
+    logger.info(`セッションデータを永続化しました: ${sessionsDataPath}`);
+    return true;
+  } catch (error) {
+    logger.error(`セッションデータの永続化に失敗: ${error.message}`);
+    return false;
+  }
+}
+
+function loadSessionsFromFile() {
+  const sessionsDataPath = path.join(__dirname, '../data/sessions/sessions.json');
+  
+  try {
+    if (fs.existsSync(sessionsDataPath)) {
+      const savedData = JSON.parse(fs.readFileSync(sessionsDataPath, 'utf8'));
+      
+      // memoryStoreの復元
+      if (savedData.memoryStore) {
+        memoryStore.projects = savedData.memoryStore.projects || [];
+        memoryStore.sessions = savedData.memoryStore.sessions || [];
+        memoryStore.messages = savedData.memoryStore.messages || {};
+      }
+      
+      // claudeCodeSessionsの復元
+      if (savedData.claudeCodeSessions) {
+        Object.assign(claudeCodeSessions, savedData.claudeCodeSessions);
+      }
+      
+      logger.info(`セッションデータを読み込みました（保存日時: ${savedData.savedAt || '不明'}）`);
+      return true;
+    }
+    return false;
+  } catch (error) {
+    logger.error(`セッションデータの読み込みに失敗: ${error.message}`);
+    return false;
+  }
+}
+
 // 環境変数の設定
 dotenv.config();
 
@@ -267,6 +322,9 @@ app.post('/api/projects', (req, res) => {
   // メモリ内ストアに保存
   memoryStore.projects.push(newProject);
   
+  // プロジェクト作成後にセッションデータを永続化
+  saveSessionsToFile();
+  
   logger.info(`実際のAPIでプロジェクトを作成: ${name}`);
   
   res.status(201).json({
@@ -317,6 +375,9 @@ app.post('/api/sessions', (req, res) => {
   try {
     startClaudeCodeSession(newSession.id, project.name);
     logger.info(`セッション開始時にClaudeCodeも起動: ${newSession.id}`);
+    
+    // セッション作成後にデータを永続化
+    saveSessionsToFile();
   } catch (error) {
     logger.error(`ClaudeCode起動エラー: ${error.message}`);
   }
@@ -438,6 +499,9 @@ app.post('/api/sessions/:id/message', async (req, res) => {
   session.lastActive = new Date().toISOString();
   session.messageCount = memoryStore.messages[sessionId].length;
   
+  // メッセージ送信後にデータを永続化
+  saveSessionsToFile();
+  
   // セッションにメッセージを含める
   session.messages = memoryStore.messages[sessionId];
   
@@ -488,6 +552,18 @@ app.use((req, res) => {
 // サーバー起動
 const startServer = async () => {
   try {
+    // 保存されたセッションデータを読み込む
+    const sessionsLoaded = loadSessionsFromFile();
+    if (sessionsLoaded) {
+      logger.info('保存されたセッションデータを復元しました');
+      
+      // 復元されたClaudeCodeセッションの状態を確認
+      const sessionCount = Object.keys(claudeCodeSessions).length;
+      logger.info(`復元されたClaudeCodeセッション数: ${sessionCount}`);
+    } else {
+      logger.info('保存されたセッションデータが見つからないか読み込めませんでした');
+    }
+    
     // .envからMongoDBの設定を読み込む
     const useMongoDb = process.env.USE_MONGODB === 'true';
     
@@ -511,12 +587,24 @@ const startServer = async () => {
       logger.info('USE_MONGODB=falseまたは設定されていないため、モックモードで起動します');
     }
     
+    // 定期的なセッションデータの永続化設定（5分ごと）
+    setInterval(() => {
+      saveSessionsToFile();
+    }, 5 * 60 * 1000);
+    
+    // プロセス終了時にもセッションデータを保存
+    process.on('SIGINT', () => {
+      logger.info('アプリケーションが終了します。セッションデータを保存します...');
+      saveSessionsToFile();
+      process.exit(0);
+    });
+    
     // サーバーリスニング開始
     app.listen(PORT, () => {
       logger.info(`サーバーが起動しました。ポート: ${PORT}`);
       
       if (!useMongoDb) {
-        logger.info(`注意: MongoDBは使用されていません。現在はメモリ内データのみで動作します。`);
+        logger.info(`注意: MongoDBは使用されていません。セッションデータはファイルシステムに自動保存されます。`);
         logger.info(`機能を完全に使用するには、MongoDBをインストールし、.envファイルでUSE_MONGODB=trueに設定してください`);
       }
     });
