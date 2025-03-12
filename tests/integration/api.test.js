@@ -45,7 +45,10 @@ describe('APIエンドポイントの統合テスト', () => {
     }
     
     // アプリケーションをインポート
-    const app = require('../../src/index');
+    const appModule = require('../../src/index');
+    
+    // すでに存在するExpressアプリを使用
+    app = appModule.app;
     
     // テスト用サーバーをリスニング
     server = app.listen(3002);

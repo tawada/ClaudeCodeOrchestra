@@ -3,6 +3,8 @@
  * 
  * このファイルは複数のClaudeCodeインスタンスをオーケストレーションするサーバーを起動し、
  * スマートフォンからのアクセスを管理する中心的なエントリーポイントです。
+ * 
+ * @module index
  */
 
 const express = require('express');
@@ -638,3 +640,10 @@ const startServer = async () => {
 
 // プログラム実行
 startServer();
+
+// テスト用にエクスポート
+module.exports = {
+  saveSessionsToFile,
+  loadSessionsFromFile,
+  app
+};
