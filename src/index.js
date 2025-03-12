@@ -17,6 +17,8 @@ const apiRoutes = require('./api/routes');
 const sessionRoutes = require('./sessions/routes');
 const { connectDB } = require('./utils/database');
 const axios = require('axios');
+const cookieParser = require('cookie-parser');
+const csrf = require('csurf');
 
 // ClaudeCode実行管理用のオブジェクト
 const claudeCodeSessions = {};
@@ -84,9 +86,29 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ミドルウェアの設定
-app.use(cors());
+app.use(cors({
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token']
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+
+// CSRF保護設定
+const csrfProtection = csrf({ 
+  cookie: { 
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict' 
+  } 
+});
+
+// CSRF トークン取得エンドポイント
+app.get('/api/csrf-token', csrfProtection, (req, res) => {
+  res.json({ csrfToken: req.csrfToken() });
+});
 
 // 静的ファイルの提供 (フロントエンド)
 app.use(express.static('public'));
@@ -310,7 +332,7 @@ app.get('/api/projects', (req, res) => {
   });
 });
 
-app.post('/api/projects', (req, res) => {
+app.post('/api/projects', csrfProtection, (req, res) => {
   const { name, description } = req.body;
   const newProject = {
     id: Date.now().toString(),
@@ -334,7 +356,7 @@ app.post('/api/projects', (req, res) => {
 });
 
 // セッション
-app.post('/api/sessions', (req, res) => {
+app.post('/api/sessions', csrfProtection, (req, res) => {
   const { projectId, anthropicApiKey } = req.body;
   
   if (!projectId) {
@@ -398,7 +420,7 @@ app.get('/api/sessions', (req, res) => {
   });
 });
 
-app.post('/api/sessions/:id/message', async (req, res) => {
+app.post('/api/sessions/:id/message', csrfProtection, async (req, res) => {
   const { message } = req.body;
   const sessionId = req.params.id;
   

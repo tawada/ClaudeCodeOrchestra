@@ -11,6 +11,7 @@ const state = {
   projects: [],
   sessions: [],
   messages: [],
+  csrfToken: null  // CSRFトークンを保存
 };
 
 // DOM要素の参照
@@ -50,6 +51,23 @@ const api = {
   // APIエンドポイントのプレフィックス
   apiPrefix: '/api',
   mockPrefix: '/api/mock',
+  
+  // CSRFトークンを取得
+  async getCsrfToken() {
+    try {
+      const response = await fetch('/api/csrf-token', {
+        credentials: 'include'  // クッキーを送信
+      });
+      const data = await response.json();
+      state.csrfToken = data.csrfToken;
+      console.log('CSRFトークンを取得しました');
+      return data.csrfToken;
+    } catch (error) {
+      console.error('CSRFトークン取得エラー:', error);
+      showError('セキュリティトークンの取得に失敗しました');
+      return null;
+    }
+  },
   
   // 環境に応じたプレフィックスを取得
   getPrefix() {
@@ -115,12 +133,20 @@ const api = {
   async createProject(name, description) {
     try {
       showLoading('プロジェクトを作成中...');
+      
+      // CSRFトークンがなければ取得
+      if (!state.csrfToken) {
+        await this.getCsrfToken();
+      }
+      
       const prefix = await this.getPrefix();
       const response = await fetch(`${prefix}/projects`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': state.csrfToken
         },
+        credentials: 'include', // クッキーを送信
         body: JSON.stringify({ name, description })
       });
       
@@ -146,12 +172,20 @@ const api = {
   async createSession(projectId, anthropicApiKey) {
     try {
       showLoading('セッションを開始中...');
+      
+      // CSRFトークンがなければ取得
+      if (!state.csrfToken) {
+        await this.getCsrfToken();
+      }
+      
       const prefix = await this.getPrefix();
       const response = await fetch(`${prefix}/sessions`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': state.csrfToken
         },
+        credentials: 'include', // クッキーを送信
         body: JSON.stringify({ 
           projectId, 
           anthropicApiKey 
@@ -179,12 +213,20 @@ const api = {
   async sendMessage(sessionId, message) {
     try {
       showLoading('メッセージを送信中...');
+      
+      // CSRFトークンがなければ取得
+      if (!state.csrfToken) {
+        await this.getCsrfToken();
+      }
+      
       const prefix = await this.getPrefix();
       const response = await fetch(`${prefix}/sessions/${sessionId}/message`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': state.csrfToken
         },
+        credentials: 'include', // クッキーを送信
         body: JSON.stringify({ message })
       });
       
@@ -488,8 +530,11 @@ function setupEventListeners() {
 }
 
 // 初期化
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   setupEventListeners();
+  
+  // CSRFトークンを取得
+  await api.getCsrfToken();
   
   // プロジェクト一覧をロード
   api.getProjects();
