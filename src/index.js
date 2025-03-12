@@ -624,7 +624,7 @@ const startServer = async () => {
     });
     
     // サーバーリスニング開始
-    app.listen(PORT, () => {
+    server = app.listen(PORT, () => {
       logger.info(`サーバーが起動しました。ポート: ${PORT}`);
       
       if (!useMongoDb) {
@@ -632,18 +632,45 @@ const startServer = async () => {
         logger.info(`機能を完全に使用するには、MongoDBをインストールし、.envファイルでUSE_MONGODB=trueに設定してください`);
       }
     });
+    
+    return server;
   } catch (error) {
     logger.error(`サーバー起動エラー: ${error.message}`);
     process.exit(1);
   }
 };
 
-// プログラム実行
-startServer();
+// サーバーインスタンスの参照を保持するための変数
+let server;
+
+// 環境変数がtestの場合はサーバーを起動しない
+if (process.env.NODE_ENV !== 'test') {
+  // プログラム実行
+  startServer().then(() => {
+    console.log('メインサーバー起動');
+  });
+} else {
+  console.log('テスト環境ではサーバーを自動起動しません');
+}
+
+// シャットダウン用の関数
+function stopServer() {
+  if (server) {
+    return new Promise((resolve) => {
+      server.close(() => {
+        console.log('サーバーを正常にシャットダウンしました');
+        resolve();
+      });
+    });
+  }
+  return Promise.resolve();
+}
 
 // テスト用にエクスポート
 module.exports = {
   saveSessionsToFile,
   loadSessionsFromFile,
-  app
+  app,
+  startServer,
+  stopServer
 };

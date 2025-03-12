@@ -46,9 +46,13 @@ describe('CSRF保護機能のテスト', () => {
     server = app.listen(3001);
   });
 
-  afterAll((done) => {
-    // テスト後にサーバーをクローズ
-    server.close(done);
+  afterAll(async () => {
+    return new Promise((resolve) => {
+      // テスト後にサーバーをクローズ
+      server.close(() => {
+        resolve();
+      });
+    });
   });
 
   test('CSRFトークンが取得できること', async () => {

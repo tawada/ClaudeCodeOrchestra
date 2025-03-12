@@ -62,19 +62,24 @@ describe('APIエンドポイントの統合テスト', () => {
     cookies = response.headers['set-cookie'];
   });
 
-  afterAll((done) => {
-    // テスト用ファイルを削除
-    try {
-      const testDataDir = path.join(__dirname, '../../data/test');
-      if (fs.existsSync(testDataDir)) {
-        fs.rmSync(testDataDir, { recursive: true, force: true });
+  afterAll(async () => {
+    return new Promise((resolve) => {
+      // テスト用ファイルを削除
+      try {
+        const testDataDir = path.join(__dirname, '../../data/test');
+        if (fs.existsSync(testDataDir)) {
+          fs.rmSync(testDataDir, { recursive: true, force: true });
+        }
+      } catch (error) {
+        console.error('テストデータクリーンアップエラー:', error);
       }
-    } catch (error) {
-      console.error('テストデータクリーンアップエラー:', error);
-    }
-    
-    // サーバーをクローズ
-    server.close(done);
+      
+      // サーバーをクローズ
+      server.close(() => {
+        // サーバー停止後にプロミスを解決
+        resolve();
+      });
+    });
   });
 
   test('プロジェクト一覧の取得', async () => {
