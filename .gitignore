@@ -1,6 +1,7 @@
 # 依存関係ディレクトリ
 node_modules/
 jspm_packages/
+package-lock.json
 
 # ログファイル
 logs
