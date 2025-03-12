@@ -1,0 +1,2 @@
+// スタイルのモック
+module.exports = {};
