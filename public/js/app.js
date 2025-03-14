@@ -409,8 +409,21 @@ function renderMessages() {
     <h3 class="card-title">セッション ID: ${state.currentSession.id}</h3>
     <p>プロジェクト: ${state.currentProject ? escapeHtml(state.currentProject.name) : '不明'}</p>
     <p>ステータス: ${state.currentSession.status}</p>
+    <div class="session-actions">
+      <button id="open-terminal-btn" class="btn secondary">Claude対話ターミナルを開く</button>
+    </div>
   `;
   elements.messagesList.appendChild(sessionInfo);
+  
+  // Claude対話ターミナルを開くボタンのイベントリスナー
+  const openTerminalBtn = document.getElementById('open-terminal-btn');
+  if (openTerminalBtn) {
+    openTerminalBtn.addEventListener('click', () => {
+      const sessionId = state.currentSession.id;
+      const url = `/claude-terminal.html?sessionId=${sessionId}`;
+      window.open(url, '_blank');
+    });
+  }
   
   // メッセージ表示
   const messageContainer = document.createElement('div');

@@ -8,6 +8,8 @@
 const express = require('express');
 const router = express.Router();
 const logger = require('../utils/logger');
+const path = require('path');
+const claudeProcess = require('../utils/claudeProcess');
 
 // ヘルスチェックエンドポイント
 router.get('/health', (req, res) => {
@@ -141,6 +143,179 @@ router.post('/mock/sessions/:id/message', (req, res) => {
       sessionId
     }
   });
+});
+
+// Claudeプロセス管理APIエンドポイント
+
+/**
+ * 新しいClaude対話型プロセスを開始
+ * POST /api/claude/processes
+ */
+router.post('/claude/processes', async (req, res) => {
+  try {
+    const { sessionId, workdir } = req.body;
+    
+    if (!sessionId) {
+      return res.status(400).json({
+        success: false,
+        message: 'セッションIDが必要です'
+      });
+    }
+    
+    // 作業ディレクトリのデフォルト値
+    const defaultWorkdir = path.join(
+      process.cwd(), 
+      'claude_workspaces', 
+      `session_${sessionId}_${Date.now()}`
+    );
+    
+    const processWorkdir = workdir || defaultWorkdir;
+    
+    // プロセスを開始
+    const processInfo = claudeProcess.startClaudeProcess(sessionId, processWorkdir);
+    
+    if (!processInfo) {
+      return res.status(500).json({
+        success: false,
+        message: 'Claudeプロセスの起動に失敗しました'
+      });
+    }
+    
+    // プロセス情報から安全に返せる情報を抽出
+    const safeProcessInfo = {
+      sessionId,
+      pid: processInfo.pid,
+      workdir: processInfo.workdir,
+      running: processInfo.running,
+      startTime: processInfo.startTime
+    };
+    
+    res.status(201).json({
+      success: true,
+      data: safeProcessInfo
+    });
+  } catch (error) {
+    logger.error(`プロセス起動APIエラー: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: `エラー: ${error.message}`
+    });
+  }
+});
+
+/**
+ * Claudeプロセスにコマンドを送信
+ * POST /api/claude/processes/:sessionId/command
+ */
+router.post('/claude/processes/:sessionId/command', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { command } = req.body;
+    
+    if (!command) {
+      return res.status(400).json({
+        success: false,
+        message: 'コマンドが必要です'
+      });
+    }
+    
+    // プロセスにコマンドを送信
+    const response = await claudeProcess.sendCommandToProcess(sessionId, command);
+    
+    res.status(200).json({
+      success: true,
+      data: {
+        sessionId,
+        response,
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    logger.error(`コマンド送信APIエラー: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: `エラー: ${error.message}`
+    });
+  }
+});
+
+/**
+ * Claudeプロセスのステータスを取得
+ * GET /api/claude/processes/:sessionId
+ */
+router.get('/claude/processes/:sessionId', (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const status = claudeProcess.getProcessStatus(sessionId);
+    
+    if (!status) {
+      return res.status(404).json({
+        success: false,
+        message: `セッション ${sessionId} のプロセスが見つかりません`
+      });
+    }
+    
+    res.status(200).json({
+      success: true,
+      data: status
+    });
+  } catch (error) {
+    logger.error(`ステータス取得APIエラー: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: `エラー: ${error.message}`
+    });
+  }
+});
+
+/**
+ * すべてのClaude対話型プロセスのステータスを取得
+ * GET /api/claude/processes
+ */
+router.get('/claude/processes', (req, res) => {
+  try {
+    const allProcesses = claudeProcess.getAllProcessesStatus();
+    
+    res.status(200).json({
+      success: true,
+      data: allProcesses
+    });
+  } catch (error) {
+    logger.error(`全プロセスステータス取得APIエラー: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: `エラー: ${error.message}`
+    });
+  }
+});
+
+/**
+ * Claudeプロセスを停止
+ * DELETE /api/claude/processes/:sessionId
+ */
+router.delete('/claude/processes/:sessionId', (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const result = claudeProcess.stopClaudeProcess(sessionId);
+    
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        message: `セッション ${sessionId} のプロセスが見つからないか、すでに停止しています`
+      });
+    }
+    
+    res.status(200).json({
+      success: true,
+      message: `セッション ${sessionId} のプロセスを停止しました`
+    });
+  } catch (error) {
+    logger.error(`プロセス停止APIエラー: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: `エラー: ${error.message}`
+    });
+  }
 });
 
 module.exports = router;

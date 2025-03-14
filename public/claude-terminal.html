@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude Terminal - ClaudeCodeOrchestra</title>
+  <link rel="stylesheet" href="css/mobile.css">
+  <style>
+    body {
+      font-family: 'Menlo', 'Courier New', monospace;
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background-color: #1e1e1e;
+      color: #f0f0f0;
+      overflow: hidden;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background-color: #2d2d2d;
+      padding: 10px 15px;
+      border-bottom: 1px solid #393939;
+    }
+
+    .header h1 {
+      font-size: 1.2rem;
+      font-weight: normal;
+      margin: 0;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      font-size: 0.8rem;
+    }
+    
+    .status-indicator {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 8px;
+    }
+    
+    .status-running {
+      background-color: #4CAF50;
+    }
+    
+    .status-stopped {
+      background-color: #F44336;
+    }
+    
+    .status-connecting {
+      background-color: #FFC107;
+      animation: blink 1s infinite;
+    }
+    
+    @keyframes blink {
+      0% { opacity: 0.4; }
+      50% { opacity: 1; }
+      100% { opacity: 0.4; }
+    }
+
+    #terminal {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 15px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.4;
+      background-color: #1e1e1e;
+      box-sizing: border-box;
+    }
+
+    .control-panel {
+      display: flex;
+      flex-direction: column;
+      background-color: #2d2d2d;
+      border-top: 1px solid #393939;
+      padding: 10px;
+    }
+
+    .input-row {
+      display: flex;
+      background-color: #1e1e1e;
+      border: 1px solid #393939;
+      border-radius: 4px;
+      padding: 8px;
+    }
+
+    .prompt {
+      color: #4CAF50;
+      margin-right: 8px;
+    }
+
+    #command-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: #f0f0f0;
+      font-family: 'Menlo', 'Courier New', monospace;
+      font-size: 14px;
+    }
+
+    #command-input:focus {
+      outline: none;
+    }
+
+    .buttons {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 10px;
+    }
+
+    .button {
+      padding: 8px 16px;
+      background-color: #0078d7;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .button:hover {
+      background-color: #0069c0;
+    }
+
+    .button.danger {
+      background-color: #d32f2f;
+    }
+
+    .button.danger:hover {
+      background-color: #b71c1c;
+    }
+
+    .button.secondary {
+      background-color: #424242;
+    }
+
+    .button.secondary:hover {
+      background-color: #303030;
+    }
+
+    /* 出力スタイル */
+    .system-message {
+      color: #888;
+      font-style: italic;
+    }
+
+    .user-input {
+      color: #4CAF50;
+    }
+
+    .claude-output {
+      color: #f0f0f0;
+    }
+
+    .error-message {
+      color: #F44336;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 1s ease-in-out infinite;
+      margin-right: 8px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* モバイル最適化 */
+    @media (max-width: 768px) {
+      .header h1 {
+        font-size: 1rem;
+      }
+
+      .buttons {
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .button {
+        flex: 1;
+        padding: 8px;
+        font-size: 13px;
+        min-width: 70px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Claude Terminal</h1>
+    <div class="status">
+      <div id="connection-status" class="status-indicator status-stopped"></div>
+      <span id="status-text">未接続</span>
+    </div>
+  </div>
+
+  <div id="terminal"></div>
+
+  <div class="control-panel">
+    <div class="input-row">
+      <span class="prompt">$</span>
+      <input type="text" id="command-input" placeholder="コマンドを入力..." autocomplete="off">
+    </div>
+    <div class="buttons">
+      <button id="connect-btn" class="button">接続</button>
+      <button id="clear-btn" class="button secondary">クリア</button>
+      <button id="stop-btn" class="button danger" disabled>停止</button>
+    </div>
+  </div>
+
+  <script>
+    // DOM要素
+    const terminal = document.getElementById('terminal');
+    const commandInput = document.getElementById('command-input');
+    const connectBtn = document.getElementById('connect-btn');
+    const clearBtn = document.getElementById('clear-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    const connectionStatus = document.getElementById('connection-status');
+    const statusText = document.getElementById('status-text');
+
+    // WebSocket接続
+    let socket = null;
+    let sessionId = null;
+    let connected = false;
+
+    // ステータス管理
+    const Status = {
+      CONNECTING: 'connecting',
+      CONNECTED: 'connected',
+      DISCONNECTED: 'disconnected'
+    };
+
+    // URLからセッションIDを取得
+    function getSessionIdFromUrl() {
+      const urlParams = new URLSearchParams(window.location.search);
+      return urlParams.get('sessionId');
+    }
+
+    // ターミナルにメッセージを追加
+    function appendToTerminal(message, className) {
+      const p = document.createElement('p');
+      p.className = className || '';
+      p.textContent = message;
+      terminal.appendChild(p);
+      terminal.scrollTop = terminal.scrollHeight;
+    }
+
+    // システムメッセージを表示
+    function showSystemMessage(message) {
+      appendToTerminal(message, 'system-message');
+    }
+
+    // エラーメッセージを表示
+    function showErrorMessage(message) {
+      appendToTerminal(`エラー: ${message}`, 'error-message');
+    }
+
+    // ユーザー入力を表示
+    function showUserInput(message) {
+      appendToTerminal(`$ ${message}`, 'user-input');
+    }
+
+    // Claudeの出力を表示
+    function showClaudeOutput(message) {
+      appendToTerminal(message, 'claude-output');
+    }
+
+    // 接続状態を更新
+    function updateConnectionStatus(status) {
+      connectionStatus.className = 'status-indicator';
+      
+      switch(status) {
+        case Status.CONNECTING:
+          connectionStatus.classList.add('status-connecting');
+          statusText.textContent = '接続中...';
+          break;
+        case Status.CONNECTED:
+          connectionStatus.classList.add('status-running');
+          statusText.textContent = '接続済み';
+          connected = true;
+          connectBtn.textContent = '切断';
+          stopBtn.disabled = false;
+          break;
+        case Status.DISCONNECTED:
+          connectionStatus.classList.add('status-stopped');
+          statusText.textContent = '未接続';
+          connected = false;
+          connectBtn.textContent = '接続';
+          stopBtn.disabled = true;
+          break;
+      }
+    }
+
+    // WebSocket接続の管理
+    function connect() {
+      if (connected) {
+        // すでに接続中なら切断
+        disconnect();
+        return;
+      }
+      
+      // セッションIDを取得
+      sessionId = getSessionIdFromUrl();
+      
+      if (!sessionId) {
+        showErrorMessage('セッションIDが指定されていません。URLにsessionIdパラメータを追加してください。');
+        return;
+      }
+      
+      updateConnectionStatus(Status.CONNECTING);
+      showSystemMessage('Claude対話サーバーに接続しています...');
+      
+      // WebSocket接続の作成
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/ws`;
+      socket = new WebSocket(wsUrl);
+      
+      // 接続が開いたとき
+      socket.onopen = () => {
+        showSystemMessage('WebSocket接続が確立されました');
+        
+        // 認証メッセージを送信
+        socket.send(JSON.stringify({
+          type: 'auth',
+          sessionId: sessionId
+        }));
+      };
+      
+      // メッセージを受信したとき
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          switch(data.type) {
+            case 'welcome':
+              showSystemMessage(data.message);
+              break;
+              
+            case 'auth_success':
+              updateConnectionStatus(Status.CONNECTED);
+              showSystemMessage('認証に成功しました。Claude対話サーバーに接続されました。');
+              
+              // プロセスのステータスをチェック
+              fetch(`/api/claude/processes/${sessionId}`)
+                .then(res => res.json())
+                .then(response => {
+                  if (response.success) {
+                    showSystemMessage(`プロセス情報: PID ${response.data.pid}, 実行中: ${response.data.running ? 'はい' : 'いいえ'}`);
+                  } else {
+                    // プロセスがまだ存在しない場合は新規作成
+                    return fetch('/api/claude/processes', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json'
+                      },
+                      body: JSON.stringify({ sessionId })
+                    });
+                  }
+                })
+                .then(res => res ? res.json() : null)
+                .then(response => {
+                  if (response && response.success) {
+                    showSystemMessage(`新しいClaude対話プロセスが開始されました: PID ${response.data.pid}`);
+                  }
+                })
+                .catch(error => {
+                  showErrorMessage(`プロセスステータスの取得に失敗しました: ${error.message}`);
+                });
+              break;
+              
+            case 'claude_output':
+              showClaudeOutput(data.content);
+              break;
+              
+            case 'process_status':
+              showSystemMessage(`プロセスステータス更新: ${data.status.running ? '実行中' : '停止'}`);
+              break;
+              
+            case 'error':
+              showErrorMessage(data.message);
+              break;
+              
+            default:
+              showSystemMessage(`不明なメッセージタイプ: ${data.type}`);
+          }
+        } catch (error) {
+          showErrorMessage(`メッセージの解析に失敗しました: ${error.message}`);
+        }
+      };
+      
+      // エラーが発生したとき
+      socket.onerror = (error) => {
+        showErrorMessage(`WebSocketエラー: ${error.message || '不明なエラー'}`);
+        updateConnectionStatus(Status.DISCONNECTED);
+      };
+      
+      // 接続が閉じられたとき
+      socket.onclose = (event) => {
+        showSystemMessage(`WebSocket接続が閉じられました ${event.wasClean ? '(正常終了)' : '(異常終了)'}: ${event.code} ${event.reason}`);
+        updateConnectionStatus(Status.DISCONNECTED);
+      };
+    }
+
+    // WebSocket接続を閉じる
+    function disconnect() {
+      if (socket) {
+        socket.close();
+        socket = null;
+      }
+      updateConnectionStatus(Status.DISCONNECTED);
+      showSystemMessage('WebSocket接続を切断しました');
+    }
+
+    // コマンドを送信
+    function sendCommand(command) {
+      if (!socket || socket.readyState !== WebSocket.OPEN || !sessionId) {
+        showErrorMessage('コマンドを送信できません: 接続されていません');
+        return false;
+      }
+      
+      // 入力をターミナルに表示
+      showUserInput(command);
+      
+      // メッセージをWebSocketで送信
+      socket.send(JSON.stringify({
+        type: 'command',
+        sessionId: sessionId,
+        content: command
+      }));
+      
+      return true;
+    }
+
+    // ターミナルをクリア
+    function clearTerminal() {
+      terminal.innerHTML = '';
+      showSystemMessage('ターミナルがクリアされました');
+    }
+
+    // Claude対話プロセスを停止
+    function stopProcess() {
+      if (!sessionId) {
+        showErrorMessage('セッションIDが指定されていません');
+        return;
+      }
+      
+      fetch(`/api/claude/processes/${sessionId}`, {
+        method: 'DELETE'
+      })
+        .then(res => res.json())
+        .then(response => {
+          if (response.success) {
+            showSystemMessage('Claude対話プロセスが停止されました');
+            disconnect();
+          } else {
+            showErrorMessage(`プロセス停止エラー: ${response.message}`);
+          }
+        })
+        .catch(error => {
+          showErrorMessage(`プロセス停止リクエストエラー: ${error.message}`);
+        });
+    }
+
+    // イベントリスナーの設定
+    connectBtn.addEventListener('click', connect);
+    clearBtn.addEventListener('click', clearTerminal);
+    stopBtn.addEventListener('click', stopProcess);
+    
+    // コマンド入力処理
+    commandInput.addEventListener('keypress', (event) => {
+      if (event.key === 'Enter') {
+        const command = commandInput.value.trim();
+        
+        if (command) {
+          const sent = sendCommand(command);
+          if (sent) {
+            commandInput.value = '';
+          }
+        }
+      }
+    });
+
+    // ページ読み込み時の処理
+    document.addEventListener('DOMContentLoaded', () => {
+      showSystemMessage('Claude Terminalへようこそ。接続ボタンをクリックしてClaudeとの対話を開始してください。');
+      
+      // URLにセッションIDがある場合は自動接続
+      if (getSessionIdFromUrl()) {
+        // 少し遅延させて自動接続
+        setTimeout(connect, 500);
+      } else {
+        showSystemMessage('セッションIDが指定されていません。URLに?sessionId=XXXXを追加してください。');
+      }
+    });
+
+    // ページ終了時の処理
+    window.addEventListener('beforeunload', () => {
+      if (socket) {
+        socket.close();
+      }
+    });
+  </script>
+</body>
+</html>

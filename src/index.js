@@ -12,6 +12,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
 const { spawn } = require('child_process');
 const logger = require('./utils/logger');
 const authRoutes = require('./auth/routes');
@@ -21,6 +22,8 @@ const { connectDB } = require('./utils/database');
 const axios = require('axios');
 const cookieParser = require('cookie-parser');
 const csrf = require('csurf');
+const websocket = require('./utils/websocket');
+const claudeProcess = require('./utils/claudeProcess');
 
 // ClaudeCode実行管理用のオブジェクト
 const claudeCodeSessions = {};
@@ -86,6 +89,9 @@ dotenv.config();
 // Expressアプリケーションのインスタンス化
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// HTTPサーバーを作成 (WebSocketのため)
+const httpServer = http.createServer(app);
 
 // ミドルウェアの設定
 app.use(cors({
@@ -611,20 +617,43 @@ const startServer = async () => {
       logger.info('USE_MONGODB=falseまたは設定されていないため、モックモードで起動します');
     }
     
+    // WebSocketルートの設定
+    app.get('/ws', (req, res) => {
+      res.status(400).send('WebSocketエンドポイントはHTTPでは使用できません');
+    });
+
     // 定期的なセッションデータの永続化設定（5分ごと）
     setInterval(() => {
       saveSessionsToFile();
     }, 5 * 60 * 1000);
     
-    // プロセス終了時にもセッションデータを保存
+    // クリーンアップ関数
+    const cleanupAllProcesses = () => {
+      logger.info('すべてのプロセスをクリーンアップします...');
+      
+      try {
+        // セッションデータを保存
+        saveSessionsToFile();
+        
+        // Claudeプロセスをクリーンアップ
+        if (claudeProcess && typeof claudeProcess.cleanupAllProcesses === 'function') {
+          claudeProcess.cleanupAllProcesses();
+        }
+      } catch (error) {
+        logger.error(`プロセスクリーンアップエラー: ${error.message}`);
+      }
+    };
+    
+    // プロセス終了時のクリーンアップハンドラを登録
+    process.on('exit', cleanupAllProcesses);
     process.on('SIGINT', () => {
-      logger.info('アプリケーションが終了します。セッションデータを保存します...');
-      saveSessionsToFile();
+      logger.info('アプリケーションが終了します。リソースをクリーンアップします...');
+      cleanupAllProcesses();
       process.exit(0);
     });
     
     // サーバーリスニング開始
-    server = app.listen(PORT, () => {
+    httpServer.listen(PORT, () => {
       logger.info(`サーバーが起動しました。ポート: ${PORT}`);
       
       if (!useMongoDb) {
@@ -633,7 +662,7 @@ const startServer = async () => {
       }
     });
     
-    return server;
+    return httpServer;
   } catch (error) {
     logger.error(`サーバー起動エラー: ${error.message}`);
     process.exit(1);
@@ -642,12 +671,33 @@ const startServer = async () => {
 
 // サーバーインスタンスの参照を保持するための変数
 let server;
+let wss;
 
 // 環境変数がtestの場合はサーバーを起動しない
 if (process.env.NODE_ENV !== 'test') {
   // プログラム実行
-  startServer().then(() => {
+  startServer().then((httpServer) => {
+    server = httpServer;
     console.log('メインサーバー起動');
+    
+    // WebSocketサーバーをセットアップ
+    wss = websocket.setupWebSocketServer(server);
+    
+    // WebSocketのコマンドイベントハンドラを設定
+    websocket.setEventHandler('command', async (sessionId, command) => {
+      try {
+        logger.info(`WebSocketから受信したコマンドをClaudeプロセスに送信: ${sessionId}`);
+        
+        // プロセスにコマンドを送信
+        const response = await claudeProcess.sendCommandToProcess(sessionId, command);
+        
+        // レスポンスをWebSocketクライアントに送信
+        websocket.sendClaudeOutput(sessionId, response);
+      } catch (error) {
+        logger.error(`WebSocketコマンド処理エラー: ${error.message}`);
+        websocket.sendError(sessionId, error.message);
+      }
+    });
   });
 } else {
   console.log('テスト環境ではサーバーを自動起動しません');
