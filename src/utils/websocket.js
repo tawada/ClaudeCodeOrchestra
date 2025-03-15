@@ -23,9 +23,25 @@ function setupWebSocketServer(server) {
   
   wss.on('connection', (ws, req) => {
     const clientId = Date.now().toString();
+    const clientIp = req.socket.remoteAddress;
     
-    logger.info(`新しいWebSocket接続: ${clientId}`);
+    logger.info(`新しいWebSocket接続: ${clientId} [IP: ${clientIp}]`);
+    logger.info(`WebSocket接続URL: ${req.url}, ヘッダー: ${JSON.stringify(req.headers)}`);
     clients.set(clientId, ws);
+    
+    // WebSocket接続情報をログファイルに記録
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const logDir = path.join(process.cwd(), 'data', 'logs');
+      if (!fs.existsSync(logDir)) {
+        fs.mkdirSync(logDir, { recursive: true });
+      }
+      const wsLogFile = path.join(logDir, 'websocket_connections.log');
+      fs.appendFileSync(wsLogFile, `[${new Date().toISOString()}] 新規接続: クライアントID=${clientId}, IP=${clientIp}, URL=${req.url}\n`);
+    } catch (err) {
+      logger.error(`WebSocketログ記録エラー: ${err.message}`);
+    }
     
     // クライアントからの認証メッセージを待機
     ws.on('message', (message) => {
@@ -37,28 +53,67 @@ function setupWebSocketServer(server) {
           const sessionId = data.sessionId;
           logger.info(`WebSocketクライアント認証: ${clientId} -> セッション ${sessionId}`);
           
+          // 認証情報をログファイルに記録
+          try {
+            const fs = require('fs');
+            const path = require('path');
+            const logDir = path.join(process.cwd(), 'data', 'logs');
+            const authLogFile = path.join(logDir, `websocket_auth_${sessionId}.log`);
+            fs.appendFileSync(authLogFile, `[${new Date().toISOString()}] クライアント認証: ${clientId}, セッションID: ${sessionId}\n`);
+          } catch (err) {
+            logger.error(`WebSocket認証ログ記録エラー: ${err.message}`);
+          }
+          
           // このセッションに関連付けられたクライアントのリストを取得または作成
           if (!sessionClients.has(sessionId)) {
             sessionClients.set(sessionId, new Set());
+            logger.info(`セッション ${sessionId} の新規クライアントセットを作成`);
           }
           
           // このクライアントをセッションに関連付け
           sessionClients.get(sessionId).add(clientId);
+          logger.info(`クライアント ${clientId} をセッション ${sessionId} に関連付けました`);
           
           // 認証成功メッセージを送信
           ws.send(JSON.stringify({
             type: 'auth_success',
-            message: 'WebSocket接続が確立されました'
+            message: 'WebSocket接続が確立されました',
+            sessionId: sessionId,
+            timestamp: new Date().toISOString()
           }));
         }
         
         // Claude対話プロセスへのコマンド送信
         if (data.type === 'command' && data.sessionId && data.content) {
-          logger.info(`WebSocketからコマンド受信: セッション ${data.sessionId}`);
+          const sessionId = data.sessionId;
+          const command = data.content;
+          logger.info(`WebSocketからコマンド受信: セッション ${sessionId}, コマンド: ${command.substring(0, 30)}...`);
+          
+          // コマンド受信をログファイルに記録
+          try {
+            const fs = require('fs');
+            const path = require('path');
+            const logDir = path.join(process.cwd(), 'data', 'logs');
+            const commandLogFile = path.join(logDir, `websocket_cmd_${sessionId}.log`);
+            fs.appendFileSync(commandLogFile, `[${new Date().toISOString()}] コマンド受信: ${command}\n`);
+          } catch (err) {
+            logger.error(`WebSocketコマンドログ記録エラー: ${err.message}`);
+          }
           
           // コマンドイベントを発行
           if (wsEventHandlers.command && typeof wsEventHandlers.command === 'function') {
-            wsEventHandlers.command(data.sessionId, data.content);
+            logger.info(`コマンドイベントハンドラを呼び出します: セッション ${sessionId}`);
+            wsEventHandlers.command(sessionId, command)
+              .then(response => {
+                logger.info(`コマンド処理が成功しました: セッション ${sessionId}`);
+              })
+              .catch(error => {
+                logger.error(`コマンド処理エラー: ${error.message}`);
+                sendError(sessionId, `コマンド処理エラー: ${error.message}`);
+              });
+          } else {
+            logger.error(`コマンドイベントハンドラが設定されていません: セッション ${sessionId}`);
+            sendError(sessionId, 'コマンドハンドラが設定されていません。サーバーの設定を確認してください。');
           }
         }
       } catch (error) {

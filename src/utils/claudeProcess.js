@@ -19,6 +19,18 @@ const activeProcesses = {};
  * @returns {Object} プロセス情報
  */
 function startClaudeProcess(sessionId, workdir) {
+  // 実行時のコマンドとプロセス情報をログファイルに記録
+  const logDir = path.join(process.cwd(), 'data', 'logs');
+  if (!fs.existsSync(logDir)) {
+    fs.mkdirSync(logDir, { recursive: true });
+  }
+  const logFile = path.join(logDir, `claude_process_${Date.now()}.log`);
+  fs.appendFileSync(logFile, `[${new Date().toISOString()}] プロセス起動情報:\n`);
+  fs.appendFileSync(logFile, `セッションID: ${sessionId}\n`);
+  fs.appendFileSync(logFile, `作業ディレクトリ: ${workdir}\n`);
+  fs.appendFileSync(logFile, `環境変数 CLAUDE_COMMAND: ${process.env.CLAUDE_COMMAND || 'undefined'}\n`);
+  fs.appendFileSync(logFile, `環境変数 CLAUDE_ARGS: ${process.env.CLAUDE_ARGS || 'undefined'}\n`);
+  fs.appendFileSync(logFile, `プロセス実行環境: ${JSON.stringify(process.env.PATH)}\n\n`);
   try {
     logger.info(`Claude対話型プロセスを開始します: ${sessionId}`);
 
@@ -42,12 +54,34 @@ function startClaudeProcess(sessionId, workdir) {
     fs.writeFileSync(outputFilePath, '', 'utf8');
     
     // 実際のClaude対話型プロセスを起動
-    const claudeProcess = spawn('claude', [], {
+    // コマンドは環境によって異なる可能性があるため、設定または環境変数から取得
+    const claudeCommand = process.env.CLAUDE_COMMAND || 'claude';
+    const claudeArgs = (process.env.CLAUDE_ARGS || '').split(' ').filter(arg => arg.trim());
+    
+    // 起動コマンドをログに記録
+    logger.info(`Claude対話型プロセスを起動: コマンド=${claudeCommand}, 引数=${claudeArgs.join(' ')}`);
+    fs.appendFileSync(logFile, `実行コマンド: ${claudeCommand} ${claudeArgs.join(' ')}\n\n`);
+    
+    // デバッグのためにwhichコマンドの結果をログに記録
+    try {
+      const whichOutput = require('child_process').execSync(`which ${claudeCommand}`, { encoding: 'utf8' });
+      fs.appendFileSync(logFile, `コマンドパス: ${whichOutput}\n`);
+    } catch (e) {
+      fs.appendFileSync(logFile, `コマンドパス検索エラー: ${e.message}\n`);
+    }
+    
+    // プロセス起動
+    const claudeProcess = spawn(claudeCommand, claudeArgs, {
       cwd: workdir,
       stdio: ['pipe', 'pipe', 'pipe'],
       detached: false, // プロセスをメインプロセスに紐づける
-      shell: true
+      shell: true,
+      env: { ...process.env, TERM: 'xterm-color' } // ターミナル設定を追加
     });
+    
+    // プロセス情報をログに記録
+    fs.appendFileSync(logFile, `プロセスPID: ${claudeProcess.pid || '不明'}\n`);
+    fs.appendFileSync(logFile, `起動時刻: ${new Date().toISOString()}\n\n`);
     
     // 標準出力とエラー出力をキャプチャ
     let stdout = '';
@@ -57,13 +91,28 @@ function startClaudeProcess(sessionId, workdir) {
       const output = data.toString();
       stdout += output;
       fs.appendFileSync(outputFilePath, output);
-      logger.debug(`[${sessionId}] Claude出力: ${output.trim()}`);
+      // より詳細なログ出力（トリミングなし）
+      logger.info(`[${sessionId}] Claude出力: ${output}`);
+      // 常にログファイルにも出力する
+      const logDir = path.join(process.cwd(), 'data', 'logs');
+      if (!fs.existsSync(logDir)) {
+        fs.mkdirSync(logDir, { recursive: true });
+      }
+      const logFile = path.join(logDir, `claude_${sessionId}.log`);
+      fs.appendFileSync(logFile, `[STDOUT ${new Date().toISOString()}] ${output}`);
     });
     
     claudeProcess.stderr.on('data', (data) => {
       const error = data.toString();
       stderr += error;
-      logger.error(`[${sessionId}] Claudeエラー: ${error.trim()}`);
+      logger.error(`[${sessionId}] Claudeエラー: ${error}`);
+      // 標準エラー出力もログファイルに記録
+      const logDir = path.join(process.cwd(), 'data', 'logs');
+      if (!fs.existsSync(logDir)) {
+        fs.mkdirSync(logDir, { recursive: true });
+      }
+      const logFile = path.join(logDir, `claude_${sessionId}.log`);
+      fs.appendFileSync(logFile, `[STDERR ${new Date().toISOString()}] ${error}`);
     });
     
     // プロセス終了時の処理
@@ -119,59 +168,140 @@ async function sendCommandToProcess(sessionId, input) {
         throw new Error(`セッション ${sessionId} のClaude対話型プロセスはすでに終了しています`);
       }
       
+      logger.info(`コマンド送信 (${sessionId}): ${input.substring(0, 50)}${input.length > 50 ? '...' : ''}`);
+      
       // 入力ファイルに書き込む
       fs.writeFileSync(processInfo.inputFile, input + '\n', 'utf8');
+      
+      // 出力キャプチャのための変数
+      let responseOutput = '';
+      let outputComplete = false;
+      let lastActivityTime = Date.now();
+      
+      // 標準出力からの新しいデータをリスニング
+      const originalStdoutListener = processInfo.process.stdout.listeners('data')[0];
+      const newStdoutListener = (data) => {
+        const chunk = data.toString();
+        responseOutput += chunk;
+        lastActivityTime = Date.now(); // データを受信するたびに最終アクティビティ時間を更新
+        
+        // 元のリスナーも呼び出し
+        if (originalStdoutListener) {
+          originalStdoutListener(data);
+        }
+        
+        // プロンプトが含まれているかチェック（応答の終了を示す）
+        if (chunk.includes('▌') || chunk.includes('> ') || chunk.includes('$') || 
+            chunk.includes('claude>') || chunk.includes('user>') || 
+            /\d+:\d+:\d+\s*$/.test(chunk.trim())) {
+          outputComplete = true;
+          logger.debug(`応答完了マーカーを検出: "${chunk.slice(-20).trim()}"`);
+        }
+        
+        // データ量が十分に多く、一定期間新しいデータが来ていない場合も完了と判断
+        if (responseOutput.length > 500 && chunk.trim().endsWith('.') && 
+            !chunk.trim().endsWith('...')) {
+          const timeWithoutNewData = Date.now() - lastActivityTime;
+          if (timeWithoutNewData > 3000) { // 3秒間新しいデータがなければ完了と見なす
+            logger.debug(`応答が3秒間停止、完了と判断: ${responseOutput.length}文字`);
+            outputComplete = true;
+          }
+        }
+      };
+      
+      // 既存のリスナーを一時的に削除
+      processInfo.process.stdout.removeAllListeners('data');
+      // 新しいリスナーを追加
+      processInfo.process.stdout.on('data', newStdoutListener);
       
       // 出力ファイルの現在のサイズを記録（新しい出力の開始位置を知るため）
       const startSize = fs.existsSync(processInfo.outputFile) 
         ? fs.statSync(processInfo.outputFile).size 
         : 0;
       
+      // コマンド送信をログに記録
+      const commandLogFile = path.join(process.cwd(), 'data', 'logs', `command_${sessionId}.log`);
+      fs.appendFileSync(commandLogFile, `\n\n[COMMAND ${new Date().toISOString()}] ${input}\n`);
+      
       // プロセスに入力を送信
       processInfo.process.stdin.write(input + '\n');
+      logger.info(`コマンドを送信しました: ${input.substring(0, 30)}...`);
       
-      // 応答タイムアウト
+      // 応答タイムアウト（120秒に延長）
       const timeout = setTimeout(() => {
-        reject(new Error('Claude対話型プロセスからの応答がタイムアウトしました'));
-      }, 30000); // 30秒タイムアウト
-      
-      // 応答を待機（ポーリング方式）
-      const checkOutput = () => {
-        if (!fs.existsSync(processInfo.outputFile)) {
-          setTimeout(checkOutput, 100);
-          return;
+        // リスナーをクリーンアップ
+        processInfo.process.stdout.removeListener('data', newStdoutListener);
+        if (originalStdoutListener) {
+          processInfo.process.stdout.on('data', originalStdoutListener);
         }
         
-        const currentSize = fs.statSync(processInfo.outputFile).size;
-        
-        // 出力ファイルに新しいデータがあるか確認
-        if (currentSize > startSize) {
-          // 新しい出力を読み取る
-          const buffer = Buffer.alloc(currentSize - startSize);
-          const fileHandle = fs.openSync(processInfo.outputFile, 'r');
-          fs.readSync(fileHandle, buffer, 0, currentSize - startSize, startSize);
-          fs.closeSync(fileHandle);
-          
-          const newOutput = buffer.toString('utf8');
-          
-          // 応答の終了を確認するための条件（例: プロンプト文字や特定のパターン）
-          if (newOutput.includes('▌') || newOutput.includes('> ')) {
-            clearTimeout(timeout);
-            resolve(newOutput);
-          } else {
-            // まだ応答が終わっていないので、再度確認
-            setTimeout(checkOutput, 100);
-          }
+        // タイムアウト時点で収集した出力があれば返す
+        if (responseOutput) {
+          logger.warn(`応答が部分的: ${responseOutput.substring(0, 100)}...`);
+          resolve(responseOutput + '\n[応答タイムアウト - 部分的な応答を表示]');
         } else {
-          // まだ新しい出力がないので、再度確認
-          setTimeout(checkOutput, 100);
+          // ファイルから直接読む最後の試み
+          try {
+            if (fs.existsSync(processInfo.outputFile)) {
+              const currentSize = fs.statSync(processInfo.outputFile).size;
+              if (currentSize > startSize) {
+                const buffer = Buffer.alloc(currentSize - startSize);
+                const fileHandle = fs.openSync(processInfo.outputFile, 'r');
+                fs.readSync(fileHandle, buffer, 0, currentSize - startSize, startSize);
+                fs.closeSync(fileHandle);
+                
+                const fileOutput = buffer.toString('utf8');
+                if (fileOutput.trim()) {
+                  resolve(fileOutput + '\n[応答タイムアウト - ファイルから読み取った応答]');
+                  return;
+                }
+              }
+            }
+          } catch (e) {
+            logger.error(`出力ファイル読み取りエラー: ${e.message}`);
+          }
+          
+          // プロセスの状態をチェックして再起動が必要か判断
+          try {
+            if (processInfo.process && !processInfo.process.killed) {
+              logger.warn(`タイムアウトだがプロセスは生きています。応答: "${responseOutput}"`);
+              resolve(`[Claude応答タイムアウト - プロセスは実行中です。もう一度試してください]`);
+            } else {
+              logger.error(`プロセスが終了しています。再起動が必要です。`);
+              reject(new Error('Claude対話型プロセスが応答しません。プロセスが終了した可能性があります。'));
+            }
+          } catch (e) {
+            logger.error(`プロセス状態チェックエラー: ${e.message}`);
+            reject(new Error('Claude対話型プロセスからの応答がタイムアウトしました'));
+          }
+        }
+      }, 120000); // 120秒タイムアウト
+      
+      // 定期的に応答完了をチェック
+      const checkCompletion = () => {
+        if (outputComplete) {
+          // 応答が完了した
+          clearTimeout(timeout);
+          
+          // リスナーをクリーンアップ
+          processInfo.process.stdout.removeListener('data', newStdoutListener);
+          if (originalStdoutListener) {
+            processInfo.process.stdout.on('data', originalStdoutListener);
+          }
+          
+          logger.info(`応答受信完了 (${sessionId}): ${responseOutput.length} 文字`);
+          resolve(responseOutput);
+        } else {
+          // まだ応答が完了していない
+          setTimeout(checkCompletion, 100);
         }
       };
       
-      // 出力の確認を開始
-      checkOutput();
+      // 応答完了チェックを開始
+      checkCompletion();
       
     } catch (error) {
+      logger.error(`コマンド送信エラー: ${error.message}`);
       reject(error);
     }
   });

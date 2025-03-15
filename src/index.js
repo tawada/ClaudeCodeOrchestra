@@ -688,14 +688,56 @@ if (process.env.NODE_ENV !== 'test') {
       try {
         logger.info(`WebSocketから受信したコマンドをClaudeプロセスに送信: ${sessionId}`);
         
+        // コマンド送信前にプロセスの状態をチェック
+        const processStatus = claudeProcess.getProcessStatus(sessionId);
+        if (!processStatus) {
+          logger.warn(`セッション ${sessionId} のプロセスが見つかりません。新規作成を試みます。`);
+          
+          // プロセスが存在しない場合は新規作成
+          const workdir = path.join(process.cwd(), 'claude_workspaces', `session_${sessionId}_${Date.now()}`);
+          const newProcess = claudeProcess.startClaudeProcess(sessionId, workdir);
+          
+          if (!newProcess) {
+            throw new Error(`セッション ${sessionId} の新規プロセス作成に失敗しました`);
+          }
+          
+          logger.info(`セッション ${sessionId} の新規プロセスを作成しました。PID: ${newProcess.pid}`);
+          
+          // プロセス起動後少し待機
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        } else if (!processStatus.running) {
+          logger.warn(`セッション ${sessionId} のプロセスは停止しています。再起動します。`);
+          claudeProcess.stopClaudeProcess(sessionId);
+          
+          // 新しいプロセスを起動
+          const workdir = processStatus.workdir || path.join(process.cwd(), 'claude_workspaces', `session_${sessionId}_${Date.now()}`);
+          const newProcess = claudeProcess.startClaudeProcess(sessionId, workdir);
+          
+          if (!newProcess) {
+            throw new Error(`セッション ${sessionId} のプロセス再起動に失敗しました`);
+          }
+          
+          logger.info(`セッション ${sessionId} のプロセスを再起動しました。PID: ${newProcess.pid}`);
+          
+          // プロセス起動後少し待機
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        } else {
+          logger.info(`セッション ${sessionId} のプロセスは実行中です。PID: ${processStatus.pid}`);
+        }
+        
         // プロセスにコマンドを送信
+        logger.info(`コマンド送信を開始します: "${command.substring(0, 30)}..."`);
         const response = await claudeProcess.sendCommandToProcess(sessionId, command);
+        logger.info(`コマンド応答を受信しました: ${response.length} 文字`);
         
         // レスポンスをWebSocketクライアントに送信
         websocket.sendClaudeOutput(sessionId, response);
+        logger.info(`WebSocketクライアントに応答を送信しました: セッション ${sessionId}`);
+        return response;
       } catch (error) {
-        logger.error(`WebSocketコマンド処理エラー: ${error.message}`);
-        websocket.sendError(sessionId, error.message);
+        logger.error(`WebSocketコマンド処理エラー: ${error.message}, スタック: ${error.stack}`);
+        websocket.sendError(sessionId, `エラー: ${error.message}`);
+        throw error;
       }
     });
   });
