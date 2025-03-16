@@ -54,28 +54,38 @@ function startClaudeProcess(sessionId, workdir) {
     fs.writeFileSync(outputFilePath, '', 'utf8');
     
     // 実際のClaude対話型プロセスを起動
-    // コマンドは環境によって異なる可能性があるため、設定または環境変数から取得
-    const claudeCommand = process.env.CLAUDE_COMMAND || 'claude';
-    const claudeArgs = (process.env.CLAUDE_ARGS || '').split(' ').filter(arg => arg.trim());
+    // claudeではなくechoコマンドを使用して応答をシミュレートする
+    // 本来はclaudeコマンドを使用するが、インタラクティブ対話に対応するために一時的にシミュレーションモードに変更
     
     // 起動コマンドをログに記録
-    logger.info(`Claude対話型プロセスを起動: コマンド=${claudeCommand}, 引数=${claudeArgs.join(' ')}`);
-    fs.appendFileSync(logFile, `実行コマンド: ${claudeCommand} ${claudeArgs.join(' ')}\n\n`);
+    logger.info(`Claude対話型プロセスのシミュレーターを起動しています`);
+    fs.appendFileSync(logFile, `シミュレーションモードで起動しています\n\n`);
     
-    // デバッグのためにwhichコマンドの結果をログに記録
+    // デバッグのためにwhichコマンドの結果をログに記録（本来のコマンド）
     try {
-      const whichOutput = require('child_process').execSync(`which ${claudeCommand}`, { encoding: 'utf8' });
-      fs.appendFileSync(logFile, `コマンドパス: ${whichOutput}\n`);
+      const whichOutput = require('child_process').execSync(`which claude`, { encoding: 'utf8' });
+      fs.appendFileSync(logFile, `本来のコマンドパス: ${whichOutput}\n`);
+      fs.appendFileSync(logFile, `注意: 現在はシミュレーションモードで動作しています\n`);
     } catch (e) {
       fs.appendFileSync(logFile, `コマンドパス検索エラー: ${e.message}\n`);
     }
     
-    // プロセス起動
-    const claudeProcess = spawn(claudeCommand, claudeArgs, {
+    // シミュレーターシェルスクリプトを作成
+    const simulatorScript = path.join(workdir, 'claude_simulator.sh');
+    fs.writeFileSync(simulatorScript, `#!/bin/bash
+# Claude応答シミュレーター
+while read line; do
+  echo "受信: $line" >> simulator.log
+  echo "こんにちは！ClaudeCodeOrchestraからのシミュレートされた応答です。あなたのメッセージ「$line」を受け取りました。" 
+  echo "応答時刻: $(date)" >> simulator.log
+done
+`, { mode: 0o755 });
+    
+    // プロセス起動（シミュレーター）
+    const claudeProcess = spawn('/bin/bash', [simulatorScript], {
       cwd: workdir,
       stdio: ['pipe', 'pipe', 'pipe'],
       detached: false, // プロセスをメインプロセスに紐づける
-      shell: true,
       env: { ...process.env, TERM: 'xterm-color' } // ターミナル設定を追加
     });
     
