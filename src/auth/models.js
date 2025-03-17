@@ -80,9 +80,14 @@ userSchema.methods.matchPassword = function(enteredPassword) {
 
 // JWTトークン生成メソッド
 userSchema.methods.getSignedJwtToken = function() {
+  // JWTシークレットが環境変数に設定されていない場合にエラーを投げる
+  if (!process.env.JWT_SECRET) {
+    throw new Error('環境変数JWT_SECRETが設定されていません。サーバーを起動する前に必ず設定してください。');
+  }
+  
   return jwt.sign(
     { id: this._id, username: this.username, role: this.role },
-    process.env.JWT_SECRET || 'devsecretkey',
+    process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRE || '24h' }
   );
 };

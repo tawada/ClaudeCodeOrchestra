@@ -39,6 +39,10 @@ npm install
 cp .env.example .env
 # .envファイルを編集して必要な環境変数を設定
 
+# 重要: セキュリティのために必ず強力なJWT_SECRETを設定してください
+# 例: JWT_SECRET=$(openssl rand -hex 32)
+# これをあなたの.envファイルに追加してください
+
 # MongoDB接続を有効化する場合
 # .envファイルを編集してMongoDB関連の設定を行う
 # USE_MONGODB=true に変更

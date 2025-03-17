@@ -37,9 +37,17 @@ exports.protect = async (req, res, next) => {
   }
   
   try {
+    // JWT_SECRETが設定されているか確認
+    if (!process.env.JWT_SECRET) {
+      logger.error('環境変数JWT_SECRETが設定されていません');
+      return res.status(500).json({
+        success: false,
+        message: 'サーバー設定エラー: JWT_SECRETが設定されていません'
+      });
+    }
+
     // トークンを検証
-    const jwtSecret = process.env.JWT_SECRET || 'devsecretkey';
-    const decoded = jwt.verify(token, jwtSecret);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
     // ユーザーを取得
     const user = await User.findById(decoded.id);

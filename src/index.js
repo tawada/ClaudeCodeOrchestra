@@ -582,6 +582,23 @@ app.use((req, res) => {
 // サーバー起動
 const startServer = async () => {
   try {
+    // 重要な環境変数が設定されているか確認
+    if (!process.env.JWT_SECRET) {
+      logger.warn('==================== 警告 ====================');
+      logger.warn('環境変数JWT_SECRETが設定されていません');
+      logger.warn('セキュリティリスクを避けるため、サーバーを起動する前に必ず設定してください');
+      logger.warn('例: JWT_SECRET=your_secret_key_here npm start');
+      logger.warn('開発環境の場合は .env ファイルに追加することも可能です');
+      logger.warn('==============================================');
+      
+      // ランダムなシークレットを生成して一時的に使用
+      const crypto = require('crypto');
+      const tempSecret = crypto.randomBytes(32).toString('hex');
+      process.env.JWT_SECRET = tempSecret;
+      logger.warn(`一時的なJWT_SECRETを生成しました。この値はサーバー再起動時に失われます。`);
+      logger.warn(`一時シークレット: ${tempSecret.substring(0, 8)}...`);
+    }
+    
     // 保存されたセッションデータを読み込む
     const sessionsLoaded = loadSessionsFromFile();
     if (sessionsLoaded) {
