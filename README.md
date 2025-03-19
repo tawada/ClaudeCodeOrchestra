@@ -102,6 +102,12 @@ npm start
 - テスト実行: `npm test`
 - リント: `npm run lint`
 
+
+## トラブルシューティング
+
+- **MongoDB接続エラー**: [MONGODB_INSTALL.md](MONGODB_INSTALL.md)の手順に従ってMongoDBをインストールするか、`.env`ファイルの`USE_MONGODB=true`を`USE_MONGODB=false`に変更して一時的にファイルシステムモードで実行できます。
+- **Node.js環境の問題**: Voltaなどのバージョン管理ツールを使用している場合、`volta install node`を実行するか、システムレベルでNode.jsをインストールしてください。
+
 ## ライセンス
 
 MIT
